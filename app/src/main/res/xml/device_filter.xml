@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Silicon Labs CP210x USB to UART Bridge -->
+    <usb-device vendor-id="4292" />
+    <!-- FTDI FT232R / FT232H / FT2232 USB Serial -->
+    <usb-device vendor-id="1027" />
+    <!-- WCH CH340 / CH341 / CH342 / CH9102 USB Serial chips (Common for LoRa modules) -->
+    <usb-device vendor-id="6790" />
+    <usb-device vendor-id="1367" />
+    <!-- Prolific PL2303 USB Serial -->
+    <usb-device vendor-id="1659" />
+    <!-- STMicroelectronics Virtual COM Port -->
+    <usb-device vendor-id="1155" />
+    <!-- Arduino & CDC ACM USB Serial standard -->
+    <usb-device vendor-id="9025" />
+    <usb-device vendor-id="10730" />
+</resources>

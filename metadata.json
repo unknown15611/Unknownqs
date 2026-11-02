@@ -1,0 +1,6 @@
+{
+  "name": "Qaidi Share - Off-Grid Decentralized Android Mesh Architecture",
+  "description": "Production-ready Android Jetpack Compose off-grid mesh, E2EE chat, GitHub private fallback, WhatsApp-grade groups & PTT audio, reels, YouTube scroll, offline maps & radio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
