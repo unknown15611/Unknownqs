@@ -68,7 +68,7 @@ export interface SearchableFeatureItem {
   name: string;
   category: string;
   description: string;
-  iconName: 'usb' | 'map' | 'radio' | 'qibla' | 'notice' | 'weather' | 'disguise' | 'fund';
+  iconName: 'usb' | 'map' | 'radio' | 'qibla' | 'notice' | 'weather' | 'disguise' | 'fund' | 'admin';
 }
 
 const DEFAULT_PEERS: PeerProfile[] = [
@@ -189,7 +189,8 @@ const DEFAULT_FEATURES: SearchableFeatureItem[] = [
   { id: 'feat-notice', name: 'Notice Board & Tactical Academy', category: 'Education', description: 'Community broadcast announcements & 100km LoRa tutorials', iconName: 'notice' },
   { id: 'feat-weather', name: 'Weather & Severe Rain Alert', category: 'Sensors', description: 'Offline barometric pressure drop & thunderstorm warnings', iconName: 'weather' },
   { id: 'feat-disguise', name: 'Stealth Calculator & Notepad Disguise', category: 'Privacy', description: 'Disguise app behind a fully working functional calculator', iconName: 'disguise' },
-  { id: 'feat-fund', name: 'Solar LoRa Hardware Fund', category: 'Community', description: '100% of native ad revenue pooled to buy repeaters', iconName: 'fund' }
+  { id: 'feat-fund', name: 'Solar LoRa Hardware Fund', category: 'Community', description: '100% of native ad revenue pooled to buy repeaters', iconName: 'fund' },
+  { id: 'feat-superadmin', name: 'Super Admin Master Console', category: 'Governance', description: 'Emergency broadcast, node quarantine & city lockdown (qaidi1561561 only)', iconName: 'admin' }
 ];
 
 interface UserSearchModalProps {

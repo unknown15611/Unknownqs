@@ -133,3 +133,14 @@ test('Global Emergency Broadcast creates critical-high priority packet and reach
   assert.ok(result.broadcast.nodesAcknowledged.includes('qaidi7711'));
   assert.ok(result.logSummary.includes('[GLOBAL EMERGENCY BROADCAST]'));
 });
+
+test('Super Admin tools are strictly restricted to qaidi1561561 and blocked for non-super-admins', () => {
+  const superAdminHandle = 'qaidi1561561';
+  const regularHandles = ['qaidi48291', 'qaidi77110', 'user_admin', 'qaidi156', 'qaidi9052'];
+
+  assert.equal(isSuperAdminAuthenticated(superAdminHandle), true);
+  for (const h of regularHandles) {
+    assert.equal(isSuperAdminAuthenticated(h), false, `Handle ${h} must not be authorized as super admin`);
+  }
+});
+

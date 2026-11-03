@@ -160,6 +160,7 @@ import { UsbOtgSerialView } from './UsbOtgSerialView';
 import { NearbyDiscoveryModal } from './NearbyDiscoveryModal';
 import { QrCodeManagerModal } from './QrCodeManagerModal';
 import { ConnectionAssistantModal } from './ConnectionAssistantModal';
+import { SuperAdminConsoleModal } from './SuperAdminConsoleModal';
 import {
   rssiToSignalPercentage,
   getSignalQuality,
@@ -1051,14 +1052,29 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             </div>
             <div className="flex items-center gap-1">
               <span className="text-[11px] font-bold text-white font-mono leading-none">{identityHandle}</span>
+              {isSuperAdmin && (
+                <span className="text-[7.5px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 font-bold leading-none animate-pulse">
+                  SUPER ADMIN
+                </span>
+              )}
               <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-semibold leading-none">
                 {rssiToSignalPercentage(-65)}% 📶
               </span>
             </div>
           </button>
 
-          {/* Right: Universal OmniSearch Button (Users, Groups, Videos, Features) */}
+          {/* Right: Super Admin Tools (Only for Super Admin) & Universal OmniSearch Button */}
           <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[10px]">
+            {isSuperAdmin && (
+              <button
+                onClick={() => setShowMasterAdminModal(true)}
+                title="Super Admin Master Governance Console (Restricted to qaidi1561561)"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/50 shadow-sm transition-all font-bold text-[9px]"
+              >
+                <ShieldCheck className="h-3 w-3 text-amber-400 animate-pulse" />
+                <span>Admin Tools</span>
+              </button>
+            )}
             <button
               onClick={() => setShowUserSearchModal(true)}
               title="Omni-Search: Users, Groups, Videos, Tools & Waitlists"
@@ -2204,135 +2220,43 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         </div>
       )}
 
-      {/* MODAL: MASTER SUPER ADMIN DASHBOARD (qaidi1561561 only!) */}
-      {showMasterAdminModal && isSuperAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-sm rounded-xl border border-emerald-500/60 bg-slate-900 p-4 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-emerald-500/30 pb-2">
-              <div className="flex items-center gap-1.5 text-emerald-400">
-                <ShieldCheck className="h-5 w-5" />
-                <h3 className="text-sm font-bold text-white">Master Governance (qaidi1561561)</h3>
-              </div>
-              <button onClick={() => setShowMasterAdminModal(false)} className="text-slate-400 hover:text-white">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Global moderation override. Only super admin <span className="font-mono text-emerald-400 font-bold">qaidi1561561</span> can promote other peers to Admin or Super Admin.
-            </p>
-
-            {/* Super Admin Delegation: Promote to Admin / Super Admin */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-emerald-300 block">Promote User to Admin / Super Admin:</span>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoteCandidateHandle}
-                  onChange={(e) => setPromoteCandidateHandle(e.target.value)}
-                  placeholder="Enter handle (e.g. qaidi7711)..."
-                  className="flex-1 rounded bg-slate-900 border border-slate-800 px-2 py-1 text-xs font-mono text-white placeholder-slate-500"
-                />
-                <select
-                  value={promoteCandidateRole}
-                  onChange={(e) => setPromoteCandidateRole(e.target.value as any)}
-                  className="rounded bg-slate-900 border border-slate-800 text-[10px] text-white px-1"
-                >
-                  <option value="ADMIN">Admin</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
-                </select>
-              </div>
-
-              <button
-                onClick={() => {
-                  if (!promoteCandidateHandle.trim()) return;
-                  setDelegatedAdmins(prev => [
-                    ...prev,
-                    { handle: promoteCandidateHandle.trim(), role: promoteCandidateRole, date: 'Just now' }
-                  ]);
-                  playFriendlyTone(880, 0.1);
-                  onLogEvent('SuperAdmin', `Delegated ${promoteCandidateRole} role to ${promoteCandidateHandle.trim()}`, 'success');
-                  setPromoteCandidateHandle('');
-                }}
-                className="w-full py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-bold shadow-md"
-              >
-                Confirm Delegation
-              </button>
-
-              {/* Delegated List */}
-              <div className="pt-2 border-t border-slate-800 space-y-1">
-                <span className="text-[10px] font-mono text-slate-400 block">Active Delegated Roles:</span>
-                {delegatedAdmins.map((adm, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-[10px] font-mono p-1 rounded bg-slate-900">
-                    <span>{adm.handle}</span>
-                    <span className="px-1.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">{adm.role}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Master Action: Ban User Node */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-red-300 block">Ban / Blacklist Node:</span>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Enter User ID (e.g. qaidi9052)..."
-                  className="flex-1 rounded bg-slate-900 border border-slate-800 px-2 py-1 text-xs font-mono text-white"
-                />
-                <button
-                  onClick={() => onLogEvent('MasterAdmin', 'Node blacklisted from mesh relay protocol.', 'error')}
-                  className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
-                >
-                  Ban Node
-                </button>
-              </div>
-            </div>
-
-            {/* City-Targeted Security Lockdown & Notepad Disguise Trigger */}
-            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-600/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-300">City-Targeted Lockdown:</span>
-                <span className="text-[10px] font-mono text-amber-400">Notepad Disguise</span>
-              </div>
-              <p className="text-[10px] text-amber-200/80 leading-relaxed">
-                Remotely enforce 4-digit PIN lock and instant Notepad disguise on nodes in a targeted surveillance city.
-              </p>
-              <div className="flex gap-1.5">
-                <select
-                  value={activeCityLockdown || ''}
-                  onChange={(e) => {
-                    const targetCity = e.target.value;
-                    if (targetCity) {
-                      setActiveCityLockdown(targetCity);
-                      setIsDisguiseUnlocked(false);
-                      onLogEvent('SuperAdmin', `Broadcasted security lockdown to ${targetCity}: Notepad disguise enforced.`, 'warn');
-                    } else {
-                      setActiveCityLockdown(null);
-                      onLogEvent('SuperAdmin', 'Lifted regional security lockdown.', 'info');
-                    }
-                  }}
-                  className="flex-1 rounded bg-slate-900 border border-slate-800 text-xs text-white px-2 py-1"
-                >
-                  <option value="">Normal Operations (No Lockdown)</option>
-                  <option value="Talagang">Enforce Talagang (Police Raid Detected)</option>
-                  <option value="Lahore">Enforce Lahore</option>
-                  <option value="Islamabad">Enforce Islamabad / Rawalpindi</option>
-                  <option value="Peshawar">Enforce Peshawar</option>
-                  <option value="ALL">Enforce ALL REGIONS (Nationwide)</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowMasterAdminModal(false)}
-              className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
-            >
-              Close Governance Panel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* EXCLUSIVE SUPER ADMIN TOOLS SUITE (qaidi1561561 only!) */}
+      <SuperAdminConsoleModal
+        isOpen={showMasterAdminModal}
+        onClose={() => setShowMasterAdminModal(false)}
+        currentHandle={identityHandle}
+        isSuperAdmin={isSuperAdmin}
+        dtnPackets={dtnPackets}
+        onPurgePackets={(packetIds) => {
+          if (packetIds && packetIds.length > 0) {
+            setDtnPackets(prev => prev.filter(p => !packetIds.includes(p.id)));
+          } else {
+            setDtnPackets(prev => prev.slice(0, 3));
+          }
+          onLogEvent('SuperAdmin', 'Purged DTN packet swarm buffers.', 'info');
+        }}
+        groups={groups}
+        peers={peers}
+        solarLoraFundRaised={solarLoraFundRaised}
+        onAddSolarFund={(amount) => {
+          setSolarLoraFundRaised(prev => +(prev + amount).toFixed(2));
+          playFriendlyTone(880, 0.15);
+          onLogEvent('SuperAdmin', `Added $${amount.toFixed(2)} to Solar LoRa Repeater treasury fund.`, 'success');
+        }}
+        activeCityLockdown={activeCityLockdown}
+        onSetCityLockdown={(city) => {
+          setActiveCityLockdown(city);
+          if (city) {
+            setIsDisguiseUnlocked(false);
+          }
+        }}
+        onTriggerGlobalBroadcast={(msg, _sev) => {
+          handleTriggerGlobalEmergencyBroadcast(msg);
+        }}
+        delegatedAdmins={delegatedAdmins}
+        onUpdateDelegatedAdmins={(admins) => setDelegatedAdmins(admins)}
+        onLogEvent={onLogEvent}
+      />
 
       {/* MODAL: 3 BOOKS ICON - LIBRARY & ALL FEATURES HUB (CONSOLIDATED SETTINGS & TOOLS) */}
       {showOtherFeaturesModal && (
@@ -2351,6 +2275,55 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             <p className="text-xs text-slate-300 leading-relaxed">
               All settings, hardware bridges, and emergency tools unified under the 3 Books Library.
             </p>
+
+            {/* SUPER ADMIN TOOLS (EXCLUSIVE TO SUPER ADMIN qaidi1561561) */}
+            {isSuperAdmin ? (
+              <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/70 via-slate-900 to-emerald-950/70 border-2 border-amber-500/60 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-extrabold text-xs">
+                    <ShieldCheck className="h-4 w-4 text-amber-400 animate-pulse" />
+                    <span>SUPER ADMIN CONSOLE</span>
+                  </div>
+                  <span className="text-[8.5px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40 font-bold">
+                    qaidi1561561 ONLY
+                  </span>
+                </div>
+                <p className="text-[10px] text-amber-100/90 leading-snug">
+                  Full sovereign governance: Network emergency alerts, node blacklisting, regional lockdowns, packet sniffer, and LoRa frequency hopping.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowMasterAdminModal(true);
+                  }}
+                  className="w-full py-2 rounded-lg bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 fill-slate-950" />
+                  <span>Launch Super Admin Tools</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                <div className="flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-slate-500" />
+                  <div>
+                    <span className="text-[10.5px] font-semibold text-slate-300 block">Super Admin Tools</span>
+                    <span className="text-[9px] text-slate-500">Restricted exclusively to super admin @qaidi1561561</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowAuthModal(true);
+                  }}
+                  className="text-[9.5px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-mono font-bold"
+                >
+                  Super Admin Auth
+                </button>
+              </div>
+            )}
 
             {/* Solar LoRa Hardware Fund Banner */}
             <div className="p-2.5 rounded-lg bg-gradient-to-r from-amber-950/40 to-emerald-950/40 border border-amber-500/40 flex items-center justify-between text-xs">
@@ -2988,6 +2961,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
           else if (featId === 'feat-notice') setActiveTab('notice');
           else if (featId === 'feat-weather') setShowWeatherModal(true);
           else if (featId === 'feat-disguise') setIsAppDisguised(true);
+          else if (featId === 'feat-superadmin') setShowMasterAdminModal(true);
           else setShowOtherFeaturesModal(true);
           onLogEvent('OmniSearch', `Launched tool: ${featId}`, 'success');
         }}
