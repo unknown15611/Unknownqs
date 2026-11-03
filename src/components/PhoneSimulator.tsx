@@ -70,7 +70,13 @@ import {
   FileText,
   Music,
   Headphones,
-  Image as ImageIcon
+  Image as ImageIcon,
+  QrCode,
+  Radar,
+  Scan,
+  Bluetooth,
+  MapPin,
+  RotateCcw
 } from 'lucide-react';
 import { NativeAdCard } from './NativeAdCard';
 import {
@@ -151,6 +157,9 @@ import { ShareSheetModal } from './ShareSheetModal';
 import { GitHubSyncModal } from './GitHubSyncModal';
 import { NearbyShareModal } from './NearbyShareModal';
 import { UsbOtgSerialView } from './UsbOtgSerialView';
+import { NearbyDiscoveryModal } from './NearbyDiscoveryModal';
+import { QrCodeManagerModal } from './QrCodeManagerModal';
+import { ConnectionAssistantModal } from './ConnectionAssistantModal';
 import {
   rssiToSignalPercentage,
   getSignalQuality,
@@ -234,6 +243,11 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
   const [showOtherFeaturesModal, setShowOtherFeaturesModal] = useState(false);
   const [showNearbyShareModal, setShowNearbyShareModal] = useState(false);
   const [showUsbOtgModal, setShowUsbOtgModal] = useState(false);
+  const [showNearbyDiscoveryModal, setShowNearbyDiscoveryModal] = useState(false);
+  const [showQrCodeModal, setShowQrCodeModal] = useState(false);
+  const [showConnectionAssistantModal, setShowConnectionAssistantModal] = useState(false);
+  const [hotspotEnabled, setHotspotEnabled] = useState(true);
+  const [dismissedConnectionBanner, setDismissedConnectionBanner] = useState(false);
   
   // City-Targeted Security, Security PIN Changing & Stealth Disguise System
   const [appSecurityPin, setAppSecurityPin] = useState('1234');
@@ -550,6 +564,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
 
     const duration = recordingSeconds || 2;
     const isGroup = chatType === 'groups';
+    const isPeerUnavailable = !isGroup && (selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false);
 
     const newPkt: DtnPacketSim = {
       id: `voice-${Date.now().toString().slice(-4)}`,
@@ -559,13 +574,17 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       createdAt: Date.now(),
       hopsLeft: 5,
       isUrgent: false,
-      status: 'DELIVERED',
+      status: isPeerUnavailable ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
       relayToken: 'VOICE_OPUS_TOKEN',
       groupId: isGroup ? selectedGroup.id : undefined,
     };
 
     setDtnPackets(prev => [...prev, newPkt]);
-    onLogEvent('VoiceNote', `Sent ${duration}s encrypted voice note over mesh.`, 'success');
+    if (isPeerUnavailable) {
+      onLogEvent('DelayTolerantStore', `Peer ${selectedPeer.handle} is currently offline. Voice note queued in local Room DB for opportunistic auto-forwarding.`, 'info');
+    } else {
+      onLogEvent('VoiceNote', `Sent ${duration}s encrypted voice note over mesh.`, 'success');
+    }
   };
 
   // Send Text Message with Islamic Law Content Filter & Message Yourself Notes routing
@@ -594,11 +613,12 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       return;
     }
 
-    const route = determineRoutingPath(radioStatus, true);
     const isGroup = chatType === 'groups';
+    const isPeerUnavailable = !isGroup && (selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false);
+    const route = isPeerUnavailable ? 'BUFFER_IN_LOCAL_ROOM_DB' : determineRoutingPath(radioStatus, true);
 
     if (route === 'BUFFER_IN_LOCAL_ROOM_DB') {
-      // Buffer packet in Room DB because Bluetooth or location is OFF
+      // Buffer packet in Room DB because peer is unavailable or Bluetooth/location is OFF
       const { updatedQueue } = enqueueOfflineChatPacket(
         `offline-pkt-${Date.now().toString().slice(-4)}`,
         identityHandle,
@@ -610,8 +630,10 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       );
       setBufferedPrivatePackets(updatedQueue);
       onLogEvent(
-        'OfflineBridge',
-        `Radios inactive: Encrypted chat buffered in Room DB. Will sync via Stealth Dark Relay when online.`,
+        'DelayTolerantStore',
+        isPeerUnavailable
+          ? `Peer ${selectedPeer.handle} is offline/out of range: Message queued in local Room DB. Will auto-forward via mesh when peer or relay comes into range.`
+          : `Radios inactive: Encrypted chat buffered in Room DB. Will sync via Stealth Dark Relay when online.`,
         'warn'
       );
     }
@@ -624,14 +646,20 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       createdAt: Date.now(),
       hopsLeft: 6,
       isUrgent: false,
-      status: route === 'BUFFER_IN_LOCAL_ROOM_DB' ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
+      status: (route === 'BUFFER_IN_LOCAL_ROOM_DB' || isPeerUnavailable) ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
       relayToken: isGroup ? 'GROUP_E2EE' : 'DIRECT_E2EE',
       groupId: isGroup ? selectedGroup.id : undefined,
     };
 
     setDtnPackets(prev => [...prev, newPkt]);
     setChatText('');
-    onLogEvent(isGroup ? 'GroupChat' : 'DirectChat', `Message dispatched to ${newPkt.destination}`, 'success');
+    onLogEvent(
+      isGroup ? 'GroupChat' : 'DirectChat',
+      isPeerUnavailable
+        ? `Queued in Room DB for offline peer ${newPkt.destination}`
+        : `Message dispatched to ${newPkt.destination}`,
+      'success'
+    );
   };
 
   // Create Group Freely Handler
@@ -695,6 +723,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
     setMediaStorage(storeRes.updatedStorage);
 
     const isGroup = chatType === 'groups';
+    const isPeerUnavailable = !isGroup && (selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false);
     const newPkt: DtnPacketSim = {
       id: `vid-${Date.now().toString().slice(-4)}`,
       source: identityHandle,
@@ -703,7 +732,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       createdAt: Date.now(),
       hopsLeft: 6,
       isUrgent: false,
-      status: 'DELIVERED',
+      status: isPeerUnavailable ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
       relayToken: 'VIDEO_SWARM_TOKEN',
       groupId: isGroup ? selectedGroup.id : undefined,
       videoAttachment: video,
@@ -712,7 +741,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
     setDtnPackets(prev => [...prev, newPkt]);
     onLogEvent(
       'ZeroDupStorage',
-      `Shared "${video.title}" (${video.sizeMb}MB). Single-instance content hash: ${storeRes.contentHash.slice(0, 8)}. Zero duplicate disk space used.`,
+      `Shared "${video.title}" (${video.sizeMb}MB). Single-instance content hash: ${storeRes.contentHash.slice(0, 8)}. ${isPeerUnavailable ? 'Queued in local Room DB for offline peer.' : 'Transmitted over active mesh.'}`,
       'success'
     );
   };
@@ -764,15 +793,18 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
       else if (isImage) previewText = `🖼 [Photo]: ${f.name} (${sizeMb} MB • Tap to View)`;
       else if (isVideo) previewText = `🎬 [Video]: ${f.name} (${sizeMb} MB • Play In-App)`;
 
+      const isGroup = chatType === 'groups';
+      const isPeerUnavailable = !isGroup && (selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false);
+
       const newPkt: DtnPacketSim = {
         id: `pkt-file-${Date.now()}-${i}`,
         source: identityHandle,
-        destination: chatType === 'groups' ? selectedGroup.name : selectedPeer.handle,
+        destination: isGroup ? selectedGroup.name : selectedPeer.handle,
         preview: previewText,
         createdAt: Date.now(),
         hopsLeft: 6,
         isUrgent: false,
-        status: 'DELIVERED',
+        status: isPeerUnavailable ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
         relayToken: 'STORAGE-SHARE',
         groupId: chatType === 'groups' ? selectedGroup.id : undefined,
         videoAttachment: isVideo ? {
@@ -786,7 +818,11 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         } : undefined
       };
       setDtnPackets(prev => [...prev, newPkt]);
-      onLogEvent('PhoneStorage', `Attached & sent ${f.name} (${sizeMb} MB) directly from phone storage.`, 'success');
+      onLogEvent(
+        'PhoneStorage',
+        `Attached & ${isPeerUnavailable ? 'queued in Room DB for offline peer' : 'sent'} ${f.name} (${sizeMb} MB) directly from phone storage.`,
+        'success'
+      );
     }
     setShowFileUploadModal(false);
   };
@@ -800,20 +836,27 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
     for (let i = 0; i < files.length; i++) totalSize += files[i].size;
     const sizeMb = +(totalSize / (1024 * 1024)).toFixed(2) || 0.5;
 
+    const isGroup = chatType === 'groups';
+    const isPeerUnavailable = !isGroup && (selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false);
+
     const newPkt: DtnPacketSim = {
       id: `pkt-folder-${Date.now()}`,
       source: identityHandle,
-      destination: chatType === 'groups' ? selectedGroup.name : selectedPeer.handle,
+      destination: isGroup ? selectedGroup.name : selectedPeer.handle,
       preview: `📂 [Entire Folder]: "${folderName}" (${files.length} files • ${sizeMb} MB • Tap to Explore)`,
       createdAt: Date.now(),
       hopsLeft: 6,
       isUrgent: false,
-      status: 'DELIVERED',
+      status: isPeerUnavailable ? 'STORED_IN_ROOM_DB' : 'DELIVERED',
       relayToken: 'FOLDER-SWARM',
-      groupId: chatType === 'groups' ? selectedGroup.id : undefined
+      groupId: isGroup ? selectedGroup.id : undefined
     };
     setDtnPackets(prev => [...prev, newPkt]);
-    onLogEvent('PhoneStorage', `Bundled & transmitted whole directory "${folderName}" (${files.length} files, ${sizeMb} MB) over mesh DTN.`, 'success');
+    onLogEvent(
+      'PhoneStorage',
+      `Bundled & ${isPeerUnavailable ? 'queued in local Room DB for offline peer' : 'transmitted'} whole directory "${folderName}" (${files.length} files, ${sizeMb} MB) over mesh DTN.`,
+      'success'
+    );
     setShowFileUploadModal(false);
   };
 
@@ -822,6 +865,65 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
     const nextVal = !radioStatus[key];
     setRadioStatus(prev => ({ ...prev, [key]: !prev[key] }));
     onLogEvent('RadioManager', `Toggled ${String(key)}: ${nextVal ? 'ENABLED' : 'DISABLED'}`, 'info');
+  };
+
+  // Enable All Needed Radios
+  const handleEnableAllRadios = () => {
+    setRadioStatus(prev => ({
+      ...prev,
+      bluetoothEnabled: true,
+      locationServicesEnabled: true,
+      wifiMeshEnabled: true
+    }));
+    setHotspotEnabled(true);
+    setDismissedConnectionBanner(false);
+    playFriendlyTone(987, 0.12);
+    // Opportunistically flush queued Room DB packets to DELIVERED
+    setDtnPackets(prev => prev.map(p => p.status === 'STORED_IN_ROOM_DB' ? { ...p, status: 'DELIVERED' } : p));
+    onLogEvent('MeshRadio', 'All required hardware radios activated (Bluetooth, Wi-Fi, Hotspot, Location). Queued packets dispatched over mesh.', 'success');
+  };
+
+  // Group Updates from QR / Admin actions
+  const handleUpdateGroup = (updatedGroup: MeshGroupSim) => {
+    setGroups(prev => prev.map(g => g.id === updatedGroup.id ? updatedGroup : g));
+    if (selectedGroup.id === updatedGroup.id) {
+      setSelectedGroup(updatedGroup);
+    }
+  };
+
+  // Select peer by handle from QR or Radar
+  const handleSelectPeerByHandle = (handle: string) => {
+    let peer = peers.find(p => p.handle.toLowerCase() === handle.toLowerCase());
+    if (!peer) {
+      peer = {
+        id: `peer-${Date.now()}`,
+        handle: handle.startsWith('@') ? handle : handle,
+        transports: ['BLE_MESH', 'WIFI_DIRECT'],
+        activeTransport: 'BLE_MESH',
+        rssiDbm: -70,
+        hopCount: 1,
+        distanceMeters: 14,
+        angleDeg: 45,
+        publicKeyHex: `04${handle.slice(-6)}a1b2c3d4e5f6`,
+        lastSeenSecAgo: 1,
+        isRelayNode: false
+      };
+      setPeers(prev => [peer!, ...prev]);
+    }
+    setSelectedPeer(peer);
+    setChatType('direct');
+    setDirectChatTarget('peer');
+    setActiveTab('chats');
+  };
+
+  // Select group by ID from QR scan
+  const handleSelectGroupById = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (group) {
+      setSelectedGroup(group);
+      setChatType('groups');
+      setActiveTab('chats');
+    }
   };
 
   // Trigger GitHub Private Sync
@@ -1028,6 +1130,41 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
           </div>
         )}
 
+        {/* Connection Setup Prompt: Ask users to turn on Bluetooth, Wi-Fi, Hotspot, and Location */}
+        {(!radioStatus.bluetoothEnabled || !radioStatus.wifiMeshEnabled || !radioStatus.locationServicesEnabled || !hotspotEnabled) && !dismissedConnectionBanner && (
+          <div className="px-2.5 py-1.5 bg-gradient-to-r from-amber-950/90 via-emerald-950/80 to-slate-900 border-b border-amber-500/40 flex items-center justify-between text-xs z-20 animate-in slide-in-from-top-1">
+            <div
+              onClick={() => setShowConnectionAssistantModal(true)}
+              className="flex items-center gap-2 cursor-pointer flex-1"
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0 animate-pulse" />
+              <div className="flex-1">
+                <span className="text-[10px] font-bold text-amber-300 block leading-tight">
+                  Enable Radios to Connect
+                </span>
+                <span className="text-[8.5px] text-slate-300 leading-none">
+                  Turn on Bluetooth, Wi-Fi, Hotspot & Location to form off-grid connection
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              <button
+                onClick={() => setShowConnectionAssistantModal(true)}
+                className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[9.5px]"
+              >
+                Turn On
+              </button>
+              <button
+                onClick={() => setDismissedConnectionBanner(true)}
+                className="text-slate-400 hover:text-white p-0.5 text-xs"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* MAIN BODY VIEW CONTENT */}
         <div className="flex-1 overflow-y-auto bg-slate-950 relative flex flex-col">
           {isWiped ? (
@@ -1078,6 +1215,28 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                 </button>
               </div>
 
+              {/* Quick Actions Strip: Nearby Discovery Radar & QR Code Hub */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowNearbyDiscoveryModal(true)}
+                  className="py-1 px-2.5 rounded-lg bg-[#04281e] hover:bg-[#06382a] border border-emerald-500/30 text-[10.5px] text-emerald-300 font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                  title="Discover nearby BLE & Wi-Fi mesh peers on 360° radar"
+                >
+                  <Radar className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                  <span>Nearby Radar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowQrCodeModal(true)}
+                  className="py-1 px-2.5 rounded-lg bg-[#04281e] hover:bg-[#06382a] border border-emerald-500/30 text-[10.5px] text-emerald-300 font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                  title="Share or scan QR codes to add users and groups"
+                >
+                  <QrCode className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>QR Add & Scan</span>
+                </button>
+              </div>
+
               {/* Chat Thread Header: Groups */}
               {chatType === 'groups' && (
                 <div className="p-2.5 rounded-lg bg-[#031d16] border border-[#063f2f] flex items-center justify-between">
@@ -1100,6 +1259,21 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                     >
                       <Plus className="h-3 w-3 text-emerald-400" />
                       <span>New Group</span>
+                    </button>
+
+                    {/* QR Code & Admin Join Requests */}
+                    <button
+                      onClick={() => setShowQrCodeModal(true)}
+                      className="relative px-2 py-1 rounded bg-[#042a20] hover:bg-[#063f2f] text-[10px] text-emerald-300 border border-[#095741] font-semibold flex items-center gap-1"
+                      title="Manage Group QR Code & Pending Join Requests"
+                    >
+                      <QrCode className="h-3 w-3 text-emerald-400" />
+                      <span>QR & Admin</span>
+                      {(selectedGroup.pendingJoinRequests?.length ?? 0) > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-bold text-[8.5px] animate-pulse">
+                          {selectedGroup.pendingJoinRequests?.length}
+                        </span>
+                      )}
                     </button>
 
                     <button
@@ -1168,6 +1342,19 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                         <p className="text-[10px] text-emerald-400/80">
                           {getEffectivePeerDisplayName(selectedPeer.handle, selectedPeer.handle, privateNicknames)}
                         </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false ? (
+                            <span className="text-[8.5px] text-amber-300 font-semibold flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                              Offline / Out of Range • Store-and-Forward Active
+                            </span>
+                          ) : (
+                            <span className="text-[8.5px] text-emerald-300 font-medium flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                              Reachable • {selectedPeer.activeTransport} ({selectedPeer.distanceMeters}m)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1384,16 +1571,31 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                               </div>
                             )}
 
-                            {/* Delivery checkmarks */}
-                            <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-400/80 pt-0.5">
+                            {/* Delivery checkmarks with interactive hop forwarding */}
+                            <div className="flex items-center justify-end gap-1.5 text-[9px] text-emerald-400/80 pt-0.5">
                               {pkt.status === 'DELIVERED' ? (
-                                <span className="text-emerald-400 flex items-center gap-0.5">
+                                <span className="text-emerald-400 flex items-center gap-0.5 font-medium">
                                   <CheckCheck className="h-3 w-3" /> Delivered
                                 </span>
                               ) : (
-                                <span className="text-amber-400 flex items-center gap-0.5">
-                                  <Clock className="h-3 w-3" /> Buffered in Room DB
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-amber-300 flex items-center gap-0.5 font-medium">
+                                    <Clock className="h-3 w-3 animate-spin text-amber-400" /> Queued in Room DB
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDtnPackets(prev => prev.map(p => p.id === pkt.id ? { ...p, status: 'DELIVERED' } : p));
+                                      playFriendlyTone(880, 0.12);
+                                      onLogEvent('MeshHopRelay', `Delivered queued packet ${pkt.id} to ${pkt.destination} via opportunistic mesh hop.`, 'success');
+                                    }}
+                                    className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[8.5px] font-bold flex items-center gap-0.5 transition-colors"
+                                    title="Simulate peer coming into range or intermediate hop forwarding packet"
+                                  >
+                                    <Zap className="h-2.5 w-2.5 text-amber-400" />
+                                    <span>Hop Deliver</span>
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -3169,7 +3371,51 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         </div>
       )}
 
+      {/* NEARBY DISCOVERY RADAR MODAL */}
+      <NearbyDiscoveryModal
+        isOpen={showNearbyDiscoveryModal}
+        onClose={() => setShowNearbyDiscoveryModal(false)}
+        peers={peers}
+        currentHandle={identityHandle}
+        onSelectPeer={(peer) => {
+          setSelectedPeer(peer);
+          setChatType('direct');
+          setDirectChatTarget('peer');
+        }}
+        onLogEvent={onLogEvent}
+        radioStatus={radioStatus}
+        onOpenConnectionAssistant={() => setShowConnectionAssistantModal(true)}
+        onOpenQrModal={() => setShowQrCodeModal(true)}
+      />
 
+      {/* QR CODE & GROUP HUB MODAL */}
+      <QrCodeManagerModal
+        isOpen={showQrCodeModal}
+        onClose={() => setShowQrCodeModal(false)}
+        identityHandle={identityHandle}
+        groups={groups}
+        peers={peers}
+        onUpdateGroup={handleUpdateGroup}
+        onSelectPeerByHandle={handleSelectPeerByHandle}
+        onSelectGroupById={handleSelectGroupById}
+        onLogEvent={onLogEvent}
+      />
+
+      {/* CONNECTION SETUP ASSISTANT MODAL */}
+      <ConnectionAssistantModal
+        isOpen={showConnectionAssistantModal}
+        onClose={() => setShowConnectionAssistantModal(false)}
+        radioStatus={radioStatus}
+        hotspotEnabled={hotspotEnabled}
+        onToggleRadio={handleToggleRadio}
+        onToggleHotspot={() => {
+          const next = !hotspotEnabled;
+          setHotspotEnabled(next);
+          onLogEvent('ConnectionAssistant', `Mobile Hotspot tethering ${next ? 'ACTIVATED' : 'DEACTIVATED'}.`, next ? 'success' : 'info');
+        }}
+        onEnableAllRadios={handleEnableAllRadios}
+        onLogEvent={onLogEvent}
+      />
       {/* MODAL: CHANGE SECURITY PIN */}
       {showPinChangeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in">

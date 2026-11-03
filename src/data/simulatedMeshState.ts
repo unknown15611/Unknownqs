@@ -18,6 +18,8 @@ export interface PeerNodeSim {
   publicKeyHex: string;
   lastSeenSecAgo: number;
   isRelayNode: boolean;
+  isReachable?: boolean;
+  status?: 'ONLINE' | 'OFFLINE';
 }
 
 export interface DtnPacketSim {
@@ -48,6 +50,13 @@ export interface OfflineReelSim {
   downloadCount: number;
 }
 
+export interface GroupJoinRequest {
+  id: string;
+  userHandle: string;
+  requestedAt: number;
+  qrInviteCodeUsed?: string;
+}
+
 export interface MeshGroupSim {
   id: string;
   name: string;
@@ -57,6 +66,9 @@ export interface MeshGroupSim {
   members: string[]; // All handles
   onlyAdminsCanPost: boolean;
   avatarColor: string;
+  qrInviteCode?: string;
+  isQrJoinEnabled?: boolean;
+  pendingJoinRequests?: GroupJoinRequest[];
 }
 
 export interface PublicHandleSim {
@@ -89,6 +101,8 @@ export const INITIAL_PEERS: PeerNodeSim[] = [
     publicKeyHex: '04c3e8a1002244bbcc998877665544332211aabbccddeeff0011223344556677',
     lastSeenSecAgo: 3,
     isRelayNode: false,
+    isReachable: true,
+    status: 'ONLINE'
   },
   {
     id: 'peer-charlie',
@@ -102,6 +116,8 @@ export const INITIAL_PEERS: PeerNodeSim[] = [
     publicKeyHex: '0499887766554433221100aabbccddeeff00112233445566778899aabbccddeeff',
     lastSeenSecAgo: 8,
     isRelayNode: true,
+    isReachable: true,
+    status: 'ONLINE'
   },
   {
     id: 'peer-router-ap',
@@ -115,6 +131,8 @@ export const INITIAL_PEERS: PeerNodeSim[] = [
     publicKeyHex: 'ROUTER_AP_NO_KEY_SOCKET_ONLY',
     lastSeenSecAgo: 1,
     isRelayNode: true,
+    isReachable: true,
+    status: 'ONLINE'
   },
   {
     id: 'peer-relay-node',
@@ -128,7 +146,39 @@ export const INITIAL_PEERS: PeerNodeSim[] = [
     publicKeyHex: '04eeff00112233445566778899aabbccddeeff00112233445566778899aabbcc',
     lastSeenSecAgo: 5,
     isRelayNode: true,
+    isReachable: true,
+    status: 'ONLINE'
   },
+  {
+    id: 'peer-tariq-valley',
+    handle: '@tariq_valley',
+    transports: ['BLE_MESH'],
+    activeTransport: 'BLE_MESH',
+    rssiDbm: -99,
+    hopCount: 0,
+    distanceMeters: 850,
+    angleDeg: 235,
+    publicKeyHex: '04a1b2c3d4e5f600112233445566778899aabbccddeeff001122334455667788',
+    lastSeenSecAgo: 4200,
+    isRelayNode: false,
+    isReachable: false,
+    status: 'OFFLINE'
+  },
+  {
+    id: 'peer-usman-remote',
+    handle: '@usman_remote',
+    transports: ['WIFI_DIRECT'],
+    activeTransport: 'WIFI_DIRECT',
+    rssiDbm: -105,
+    hopCount: 0,
+    distanceMeters: 1400,
+    angleDeg: 15,
+    publicKeyHex: '04ffeeddccbbaa00112233445566778899aabbccddeeff001122334455667788',
+    lastSeenSecAgo: 7900,
+    isRelayNode: false,
+    isReachable: false,
+    status: 'OFFLINE'
+  }
 ];
 
 export const INITIAL_GROUPS: MeshGroupSim[] = [
@@ -141,6 +191,16 @@ export const INITIAL_GROUPS: MeshGroupSim[] = [
     members: ['@Qaidi156', '@bob_mesh', '@charlie_rescue', '@relay_ridge_04'],
     onlyAdminsCanPost: false,
     avatarColor: 'from-emerald-500 to-teal-700',
+    qrInviteCode: 'INV-OPS-9841',
+    isQrJoinEnabled: true,
+    pendingJoinRequests: [
+      {
+        id: 'req-join-01',
+        userHandle: 'qaidi88219',
+        requestedAt: Date.now() - 300000,
+        qrInviteCodeUsed: 'INV-OPS-9841'
+      }
+    ]
   },
   {
     id: 'group-emergency-broadcast',
@@ -151,6 +211,9 @@ export const INITIAL_GROUPS: MeshGroupSim[] = [
     members: ['@Qaidi156', '@bob_mesh', '@charlie_rescue', '@relay_ridge_04'],
     onlyAdminsCanPost: true,
     avatarColor: 'from-amber-500 to-red-700',
+    qrInviteCode: 'INV-CAMP-1092',
+    isQrJoinEnabled: false,
+    pendingJoinRequests: []
   },
 ];
 
