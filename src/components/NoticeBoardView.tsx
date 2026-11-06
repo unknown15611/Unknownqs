@@ -34,7 +34,9 @@ import {
   BookOpen,
   Lock,
   Sun,
-  DollarSign
+  DollarSign,
+  MessageSquare,
+  Trash2
 } from 'lucide-react';
 import { NativeAdCard } from './NativeAdCard';
 import {
@@ -68,7 +70,7 @@ const DEFAULT_NOTICES: NoticeItem[] = [
     id: 'notice-diy-broadcaster',
     category: 'DIY_BROADCASTER',
     title: 'DIY Emergency Radio Broadcaster: Voice & Digital Mesh Guide',
-    author: 'qaidi1561561 (Master Authority)',
+    author: 'qaidi156156 (Master Authority)',
     createdAtText: 'Today • Verified Broadcast',
     isPinned: true,
     isOfflineCached: true,
@@ -378,6 +380,8 @@ interface NoticeBoardViewProps {
   onDownloadNotice?: (title: string, size: number) => void;
   onBroadcastPushNotification?: (title: string, summary: string) => void;
   externalEmergencyNotice?: NoticeItem | null;
+  onShareToChat?: (text: string, mediaType?: 'VIDEO' | 'IMAGE', mediaTitle?: string) => void;
+  onShareToSocial?: (content: string, mediaType?: 'VIDEO' | 'IMAGE', mediaTitle?: string) => void;
 }
 
 export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
@@ -386,7 +390,9 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
   onLogEvent,
   onDownloadNotice,
   onBroadcastPushNotification,
-  externalEmergencyNotice
+  externalEmergencyNotice,
+  onShareToChat,
+  onShareToSocial
 }) => {
   const [notices, setNotices] = useState<NoticeItem[]>(DEFAULT_NOTICES);
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
@@ -395,8 +401,8 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
   
   const [solarLoraFund, setSolarLoraFund] = useState(24.30);
 
-  // Super Admin Check (strictly locked to qaidi1561561)
-  const isSuperAdminAuthorized = isSuperAdmin || currentHandle === 'qaidi1561561';
+  // Super Admin Check (strictly locked to qaidi156156)
+  const isSuperAdminAuthorized = isSuperAdmin || currentHandle === 'qaidi156156';
 
   // Synchronize any external emergency broadcast directly into notice board
   useEffect(() => {
@@ -439,7 +445,7 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
   // Dynamic Add Notice / Post Composer Modal (Only Super Admin can publish & broadcast push notifications)
   const [showAddNoticeModal, setShowAddNoticeModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newAuthor, setNewAuthor] = useState('qaidi1561561 (Super Admin)');
+  const [newAuthor, setNewAuthor] = useState('qaidi156156 (Super Admin)');
   const [newCategory, setNewCategory] = useState<NoticeItem['category']>('COMMUNITY_ANNOUNCEMENT');
   const [newSummary, setNewSummary] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -466,11 +472,11 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
     return () => clearInterval(timer);
   }, [isPlayingVideo, selectedNotice]);
 
-  // Handle Create Notice (Strictly restricted to Super Admin qaidi1561561)
+  // Handle Create Notice (Strictly restricted to Super Admin qaidi156156)
   const handleCreateNotice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdminAuthorized) {
-      alert("Permission Denied: Only Super Admin (@qaidi1561561) can publish verified notices and broadcast network push alerts.");
+      alert("Permission Denied: Only Super Admin (@qaidi156156) can publish verified notices and broadcast network push alerts.");
       return;
     }
 
@@ -480,7 +486,7 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
       id: `notice-admin-${Date.now()}`,
       category: newCategory,
       title: newTitle.trim(),
-      author: 'qaidi1561561 (Super Admin)',
+      author: 'qaidi156156 (Super Admin)',
       createdAtText: 'Just now • Super Admin Broadcast',
       isPinned: true,
       isOfflineCached: markAsOfflineCached,
@@ -587,7 +593,7 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
           ) : (
             <div
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[10px] text-slate-400 font-mono"
-              title="Only Super Admin (qaidi1561561) can publish verified notices and push alerts"
+              title="Only Super Admin (qaidi156156) can publish verified notices and push alerts"
             >
               <Lock className="h-3 w-3 text-emerald-400" />
               <span>Admin Broadcasts Only</span>
@@ -726,10 +732,52 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShareToChat?.(`📢 [Mesh Notice]: "${notice.title}" - ${notice.summary}`, 'IMAGE');
+                    onLogEvent('NoticeBoard', `Shared notice "${notice.title}" to Mesh Chat!`, 'success');
+                  }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-300 border border-emerald-500/40 text-[9px] font-semibold"
+                  title="Share to Chat"
+                >
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  <span>Chat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShareToSocial?.(`📢 Notice: ${notice.title}\n\n${notice.summary}\n\nCategory: ${notice.category}`);
+                    onLogEvent('NoticeBoard', `Shared notice "${notice.title}" to Social Feed!`, 'success');
+                  }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-300 border border-emerald-500/40 text-[9px] font-semibold"
+                  title="Share to Social"
+                >
+                  <Share2 className="h-2.5 w-2.5" />
+                  <span>Social</span>
+                </button>
+
+                {isSuperAdminAuthorized && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNotices(prev => prev.filter(n => n.id !== notice.id));
+                      onLogEvent('NoticeBoard', `Super Admin (@qaidi156156) purged notice "${notice.title}" network-wide.`, 'warn');
+                    }}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/50 text-[9px] font-bold"
+                    title="Super Admin Force Delete Notice Everywhere"
+                  >
+                    <Trash2 className="h-2.5 w-2.5 text-rose-400" />
+                    <span>Delete</span>
+                  </button>
+                )}
                 {notice.isOfflineCached ? (
                   <span className="flex items-center gap-1 text-emerald-400 font-bold">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Offline Ready</span>
+                    <span>Cached</span>
                   </span>
                 ) : (
                   <button
@@ -992,24 +1040,50 @@ export const NoticeBoardView: React.FC<NoticeBoardViewProps> = ({
             </div>
 
             {/* Action Bar */}
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
-              <button
-                onClick={() => {
-                  onLogEvent('NoticeBoard', `Relayed post "${selectedNotice.title}" over Wi-Fi / BLE mesh to peers.`, 'success');
-                }}
-                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Share2 className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Relay via Mesh</span>
-              </button>
+            <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    onShareToChat?.(`📢 [Mesh Notice]: "${selectedNotice.title}" - ${selectedNotice.summary}`, 'IMAGE');
+                    onLogEvent('NoticeBoard', `Shared notice "${selectedNotice.title}" to Mesh Chat!`, 'success');
+                  }}
+                  className="py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>Share to Chat</span>
+                </button>
 
-              <button
-                onClick={() => handleDownloadNotice(selectedNotice)}
-                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>{selectedNotice.isOfflineCached ? 'Re-cache Post' : 'Save Offline (100%)'}</span>
-              </button>
+                <button
+                  onClick={() => {
+                    onShareToSocial?.(`📢 Notice: ${selectedNotice.title}\n\n${selectedNotice.summary}\n\nCategory: ${selectedNotice.category}`);
+                    onLogEvent('NoticeBoard', `Shared notice "${selectedNotice.title}" to Social Feed!`, 'success');
+                  }}
+                  className="py-2 rounded-xl bg-[#042d21] hover:bg-emerald-800/40 text-emerald-200 border border-emerald-700/60 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Share2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Share to Social</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    onLogEvent('NoticeBoard', `Relayed post "${selectedNotice.title}" over Wi-Fi / BLE mesh to peers.`, 'success');
+                  }}
+                  className="py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Radio className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Relay via Mesh</span>
+                </button>
+
+                <button
+                  onClick={() => handleDownloadNotice(selectedNotice)}
+                  className="py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{selectedNotice.isOfflineCached ? 'Re-cache Post' : 'Save Offline (100%)'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

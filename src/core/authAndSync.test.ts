@@ -39,26 +39,26 @@ import {
 
 import { shouldInsertReelAd, isGlobalSuperAdmin } from './adminAndAds.ts';
 
-test('Handle generator creates qaidi[random] format and never yields qaidi1561561', () => {
+test('Handle generator creates qaidi[random] format and never yields qaidi156156', () => {
   for (let i = 0; i < 20; i++) {
     const handle = generateRandomQaidiHandle(['qaidi1001']);
     assert.ok(handle.startsWith('qaidi'));
-    assert.notEqual(handle, 'qaidi1561561');
+    assert.notEqual(handle, 'qaidi156156');
     assert.equal(isValidQaidiHandle(handle), true);
   }
 });
 
-test('Super Admin check is strictly locked to qaidi1561561', () => {
-  assert.equal(isSuperAdminAuthenticated('qaidi1561561'), true);
-  assert.equal(isSuperAdminAuthenticated('@qaidi1561561'), true);
-  assert.equal(isSuperAdminAuthenticated('Qaidi1561561'), true);
+test('Super Admin check is strictly locked to qaidi156156', () => {
+  assert.equal(isSuperAdminAuthenticated('qaidi156156'), true);
+  assert.equal(isSuperAdminAuthenticated('@qaidi156156'), true);
+  assert.equal(isSuperAdminAuthenticated('Qaidi156156'), true);
   assert.equal(isSuperAdminAuthenticated('qaidi156'), false);
   assert.equal(isSuperAdminAuthenticated('qaidi4829'), false);
   assert.equal(isSuperAdminAuthenticated('ql156'), false);
   assert.equal(isSuperAdminAuthenticated('admin'), false);
 
-  assert.equal(isGlobalSuperAdmin('qaidi1561561'), true);
-  assert.equal(isGlobalSuperAdmin('@qaidi1561561'), true);
+  assert.equal(isGlobalSuperAdmin('qaidi156156'), true);
+  assert.equal(isGlobalSuperAdmin('@qaidi156156'), true);
   assert.equal(isGlobalSuperAdmin('qaidi156'), false);
   assert.equal(isGlobalSuperAdmin('ql156'), false);
 });

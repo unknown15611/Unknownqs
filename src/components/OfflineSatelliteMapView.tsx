@@ -210,7 +210,7 @@ const INITIAL_AID_POINTS: AidPoint[] = [
     xPct: 22,
     yPct: 28,
     description: 'Quiet indoor refuge with off-grid solar generators for charging phones and LoRa devices.',
-    reporterHandle: 'qaidi1561561',
+    reporterHandle: 'qaidi156156',
     reportedAt: '1h ago',
     realVotes: 52,
     fakeVotes: 0,
@@ -245,6 +245,9 @@ interface OfflineSatelliteMapViewProps {
 export const OfflineSatelliteMapView: React.FC<OfflineSatelliteMapViewProps> = ({ onLogEvent }) => {
   // Map Rendering Mode: 'satellite' (Photorealistic Aerial) vs 'google_vector' (Google Maps style streets & blocks)
   const [mapStyle, setMapStyle] = useState<'google_vector' | 'satellite'>('google_vector');
+
+  // RF Mesh Signal Strength Heat Wave Layer (Stealth Mobile P2P Swarm - No Fixed Relays/Repeaters)
+  const [showSignalHeatWave, setShowSignalHeatWave] = useState(true);
 
   // Active City Pack
   const [cityPacks, setCityPacks] = useState<OfflineCityPack[]>(DEFAULT_CITY_PACKS);
@@ -566,6 +569,23 @@ export const OfflineSatelliteMapView: React.FC<OfflineSatelliteMapViewProps> = (
             <span>{mapStyle === 'satellite' ? 'Satellite' : 'Vector Map'}</span>
           </button>
 
+          {/* RF Signal Strength Heat Wave Toggle (No Fixed Relays/Repeaters) */}
+          <button
+            onClick={() => setShowSignalHeatWave(prev => !prev)}
+            title="Toggle RF Signal Strength Heat Wave (Shows where mesh signal is strong without exposing physical repeater hardware)"
+            className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-all ${
+              showSignalHeatWave
+                ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400 shadow-md shadow-emerald-950/60'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
+            }`}
+          >
+            <Activity className="h-3 w-3 text-emerald-400 animate-pulse" />
+            <span>Heat Wave</span>
+            <span className="text-[8px] px-1 py-0.2 rounded bg-black/40 font-mono">
+              {showSignalHeatWave ? 'ON' : 'OFF'}
+            </span>
+          </button>
+
           {/* City / Offline Sector Packs Modal Trigger */}
           <button
             onClick={() => setShowCityDownloadModal(true)}
@@ -581,7 +601,7 @@ export const OfflineSatelliteMapView: React.FC<OfflineSatelliteMapViewProps> = (
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pointer-events-auto px-0.5">
           <div className="px-2.5 py-1 rounded-full bg-slate-950/90 border border-emerald-500/40 text-[9px] font-mono text-emerald-400 flex items-center gap-1 shrink-0 shadow-md">
             <ShieldCheck className="h-3 w-3 text-emerald-400" />
-            <span>OPSEC: Mesh Hardware Nodes Hidden</span>
+            <span>OPSEC: Fixed Relays & Repeaters Removed (Stealth Swarm Heat Wave Active)</span>
           </div>
           {[
             { id: 'ALL', label: 'All Aid', icon: <MapPin className="h-3 w-3" /> },
@@ -771,6 +791,93 @@ export const OfflineSatelliteMapView: React.FC<OfflineSatelliteMapViewProps> = (
                 <path d="M 220 0 Q 300 400 680 800" stroke="#f59e0b" strokeWidth="4" opacity="0.7" />
               </svg>
             </div>
+          )}
+
+          {/* RF SIGNAL STRENGTH HEAT WAVE LAYER (DECENTRALIZED P2P SWARM - NO FIXED RELAYS/REPEATERS) */}
+          {showSignalHeatWave && (
+            <svg className="w-full h-full absolute inset-0 pointer-events-none z-10 select-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                {/* Sector 1: Ultra-High Signal Thermal Radial Gradient */}
+                <radialGradient id="rfHeatSector1" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.65" />
+                  <stop offset="35%" stopColor="#059669" stopOpacity="0.45" />
+                  <stop offset="70%" stopColor="#047857" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="#064e3b" stopOpacity="0" />
+                </radialGradient>
+
+                {/* Sector 2: High Bandwidth Corridor Gradient */}
+                <radialGradient id="rfHeatSector2" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.60" />
+                  <stop offset="40%" stopColor="#0891b2" stopOpacity="0.38" />
+                  <stop offset="75%" stopColor="#0e7490" stopOpacity="0.18" />
+                  <stop offset="100%" stopColor="#155e75" stopOpacity="0" />
+                </radialGradient>
+
+                {/* Sector 3: Active Mobile Swarm Gradient */}
+                <radialGradient id="rfHeatSector3" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#34d399" stopOpacity="0.55" />
+                  <stop offset="45%" stopColor="#10b981" stopOpacity="0.30" />
+                  <stop offset="80%" stopColor="#059669" stopOpacity="0.12" />
+                  <stop offset="100%" stopColor="#022c22" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+
+              {/* Dynamic Thermal Flow Waves propagating across mobile swarm sectors */}
+              <g fill="none">
+                <path
+                  d="M 120 220 Q 340 380 580 440 T 780 520"
+                  stroke="#10b981"
+                  strokeWidth="24"
+                  strokeOpacity="0.18"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M 120 220 Q 340 380 580 440 T 780 520"
+                  stroke="#34d399"
+                  strokeWidth="8"
+                  strokeOpacity="0.35"
+                  strokeDasharray="18 12"
+                  className="animate-pulse"
+                />
+              </g>
+
+              {/* Zone 1: Liberty Market & Sector B (High Signal: -48 dBm) */}
+              <g>
+                <circle cx="44%" cy="45%" r="160" fill="url(#rfHeatSector1)" />
+                <circle cx="44%" cy="45%" r="120" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.4" strokeDasharray="6 4" fill="none" className="animate-pulse" />
+                <circle cx="44%" cy="45%" r="65" stroke="#34d399" strokeWidth="2" strokeOpacity="0.6" strokeDasharray="4 3" fill="none" />
+                <text x="44%" y="42%" textAnchor="middle" fill="#ecfdf5" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                  HIGH SIGNAL HEAT WAVE (-48 dBm)
+                </text>
+                <text x="44%" y="46%" textAnchor="middle" fill="#6ee7b7" fontSize="7.5" fontFamily="monospace">
+                  82 Mobile Phone Nodes • Strong Swarm Core
+                </text>
+              </g>
+
+              {/* Zone 2: Canal Bank & Campus Corridor (High Bandwidth: -56 dBm) */}
+              <g>
+                <circle cx="28%" cy="32%" r="130" fill="url(#rfHeatSector2)" />
+                <circle cx="28%" cy="32%" r="90" stroke="#06b6d4" strokeWidth="1.5" strokeOpacity="0.4" strokeDasharray="5 3" fill="none" className="animate-pulse" />
+                <text x="28%" y="30%" textAnchor="middle" fill="#ecfdf5" fontSize="8.5" fontWeight="bold" fontFamily="monospace">
+                  STRONG SWARM BAND (-56 dBm)
+                </text>
+                <text x="28%" y="34%" textAnchor="middle" fill="#67e8f9" fontSize="7.5" fontFamily="monospace">
+                  46 Moving Peer Nodes
+                </text>
+              </g>
+
+              {/* Zone 3: Civic Center Corridor (Active Swarm: -64 dBm) */}
+              <g>
+                <circle cx="68%" cy="58%" r="120" fill="url(#rfHeatSector3)" />
+                <circle cx="68%" cy="58%" r="80" stroke="#34d399" strokeWidth="1.5" strokeOpacity="0.35" strokeDasharray="4 4" fill="none" />
+                <text x="68%" y="56%" textAnchor="middle" fill="#ecfdf5" fontSize="8.5" fontWeight="bold" fontFamily="monospace">
+                  ACTIVE SECTOR CORRIDOR (-64 dBm)
+                </text>
+                <text x="68%" y="60%" textAnchor="middle" fill="#a7f3d0" fontSize="7.5" fontFamily="monospace">
+                  29 Swarm Nodes
+                </text>
+              </g>
+            </svg>
           )}
 
           {/* SAFE EVACUATION ROUTE OVERLAY (IF TOGGLED) */}

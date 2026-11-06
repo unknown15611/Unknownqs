@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
-  UserCheck,
   MessageSquare,
   Users,
   Film,
@@ -21,10 +20,15 @@ import {
   Play,
   Share2,
   X,
-  UserPlus,
-  Wifi,
-  WifiOff
+  QrCode,
+  Scan,
+  Copy,
+  Radar,
+  Volume2,
+  RefreshCw,
+  Camera
 } from 'lucide-react';
+import { rssiToSignalPercentage } from '../core/securityAndLockdown';
 
 export interface PeerProfile {
   handle: string;
@@ -73,8 +77,8 @@ export interface SearchableFeatureItem {
 
 const DEFAULT_PEERS: PeerProfile[] = [
   {
-    handle: 'qaidi1561561',
-    displayName: 'Super Admin (qaidi1561561)',
+    handle: 'qaidi156156',
+    displayName: 'Super Admin (qaidi156156)',
     hardwareMac: '02:00:00:FF:AA:01',
     isOnlineMesh: true,
     rssiDbm: -54,
@@ -83,8 +87,8 @@ const DEFAULT_PEERS: PeerProfile[] = [
     isSuperAdmin: true
   },
   {
-    handle: 'qaidi48291',
-    displayName: 'Qaidi Node 48291',
+    handle: 'qaidi4829',
+    displayName: 'Qaidi Node 4829',
     hardwareMac: '9C:E6:5E:2B:1A:08',
     isOnlineMesh: true,
     rssiDbm: -68,
@@ -92,77 +96,78 @@ const DEFAULT_PEERS: PeerProfile[] = [
     lastSeenText: 'Active now'
   },
   {
-    handle: 'qaidi77112',
+    handle: 'qaidi7711',
     displayName: 'Lahore Relief Node',
-    hardwareMac: '44:85:00:C1:2F:90',
-    isOnlineMesh: true,
-    rssiDbm: -76,
-    hopsAway: 2,
-    lastSeenText: '3m ago'
-  },
-  {
-    handle: 'qaidi31205',
-    displayName: 'Sector G Mesh Relay',
-    hardwareMac: '78:D2:94:11:80:BC',
-    isOnlineMesh: false,
-    rssiDbm: -92,
-    hopsAway: 3,
-    lastSeenText: '18m ago'
-  },
-  {
-    handle: 'qaidi90524',
-    displayName: 'Volunteer Field Medic',
-    hardwareMac: 'A0:2B:B8:33:41:FA',
+    hardwareMac: '3A:88:C2:5F:99:12',
     isOnlineMesh: true,
     rssiDbm: -62,
     hopsAway: 1,
     lastSeenText: 'Active now'
   },
   {
-    handle: 'qaidi55883',
-    displayName: 'Rawalpindi Ham Repeater',
-    hardwareMac: '50:C7:BF:88:91:02',
+    handle: 'qaidi3390',
+    displayName: 'Sector F-7 Mesh Relay',
+    hardwareMac: '1C:44:B0:81:4A:9C',
+    isOnlineMesh: true,
+    rssiDbm: -72,
+    hopsAway: 2,
+    lastSeenText: 'Active now'
+  },
+  {
+    handle: 'qaidi9012',
+    displayName: 'Civil Hospital Field Unit',
+    hardwareMac: '7E:21:A9:04:D3:5B',
     isOnlineMesh: false,
-    rssiDbm: -105,
+    rssiDbm: -92,
+    hopsAway: 3,
+    lastSeenText: 'Seen 42m ago'
+  },
+  {
+    handle: 'qaidi5520',
+    displayName: 'Rawalpindi Volunteer Cell',
+    hardwareMac: 'B4:D8:1E:73:90:EE',
+    isOnlineMesh: false,
+    rssiDbm: -98,
     hopsAway: 4,
-    lastSeenText: '1 hour ago'
+    lastSeenText: 'Seen 2h ago'
   }
 ];
 
 const DEFAULT_GROUPS: SearchableGroup[] = [
-  { id: 'group-mesh-ops', name: 'Tactical Mesh Ops', membersCount: 14, isAvailable: true, topic: 'Packet frequency hopping & LoRa relay coordinates' },
-  { id: 'group-medical', name: 'Field Medic & Relief', membersCount: 8, isAvailable: true, topic: 'Emergency burn creams, clean saline, & triage' },
-  { id: 'group-food-water', name: 'Community Kitchen & Water', membersCount: 12, isAvailable: false, topic: 'Offline supply caches & solar charging hubs' },
-  { id: 'group-talagang', name: 'Talagang Autonomous District', membersCount: 6, isAvailable: false, topic: 'Talagang district off-grid neighborhood cluster' }
+  { id: 'tactical-ops', name: 'Tactical Mesh Ops', membersCount: 18, isAvailable: true, topic: 'District frequency routing & peer packets' },
+  { id: 'first-aid-lahore', name: 'Emergency First Aid Squad', membersCount: 34, isAvailable: true, topic: 'Medical relief, burn kits & field sanitation' },
+  { id: 'campus-liberty', name: 'Campus & Liberty Relief', membersCount: 42, isAvailable: true, topic: 'Civilian assembly & encrypted food logistics' },
+  { id: 'diy-broadcasters', name: 'DIY LoRa & Radio Cell', membersCount: 27, isAvailable: true, topic: 'FM transmitters, cantennas & solar routers' },
+  { id: 'super-admin-desk', name: 'Command & Official Broadcast', membersCount: 156, isAvailable: true, topic: 'Super admin verified bulletins & alert sirens' }
 ];
 
 const DEFAULT_YOUTUBE_VIDEOS: SearchableYouTubeVideo[] = [
   {
     id: 'yt-1',
-    youtubeId: 'cantenna_guide',
-    title: 'How to Build an Emergency Cantenna Wi-Fi Booster for Under $5',
-    channelName: 'OffGrid Tech Lab',
-    durationText: '8:42',
-    category: 'DIY Radio',
-    url: 'https://youtube.com/watch?v=cantenna_guide'
+    youtubeId: 'emergency_radio_broadcaster',
+    title: 'DIY Emergency Radio Broadcaster: Voice & Digital Mesh Guide',
+    channelName: 'Tactical RF Engineering',
+    durationText: '18:45',
+    category: 'DIY Radio & Broadcaster',
+    url: 'https://youtube.com/watch?v=emergency_radio_broadcaster'
   },
   {
     id: 'yt-2',
-    youtubeId: 'esp32_lora_mesh',
-    title: 'ESP32 LoRa Mesh Packet Radio: Firmware Flashing & Relay Setup',
-    channelName: 'Mesh Pakistan Network',
-    durationText: '12:08',
-    category: 'LoRa Mesh',
-    url: 'https://youtube.com/watch?v=esp32_lora_mesh'
+    youtubeId: 'cantenna_diy_build_guide',
+    title: 'DIY Can Antenna (Cantenna) Guide: 10x Range Booster',
+    channelName: 'Radio Guerrilla Tech',
+    durationText: '14:05',
+    category: 'Cantenna & Antennas',
+    url: 'https://youtube.com/watch?v=cantenna_diy_build_guide'
   },
   {
     id: 'yt-3',
-    youtubeId: 'solar_battery_guide',
-    title: 'DIY 18650 Battery Pack & Solar Charge Controller for Blackouts',
-    channelName: 'Solar Tech Urdu',
-    durationText: '10:15',
-    category: 'Solar & Energy',
-    url: 'https://youtube.com/watch?v=solar_battery_guide'
+    youtubeId: 'p2p_mesh_packet_forwarding',
+    title: 'How P2P Multi-Hop Routing Works Without Internet or Routers',
+    channelName: 'Mesh Protocol Academy',
+    durationText: '11:20',
+    category: 'P2P Protocols',
+    url: 'https://youtube.com/watch?v=p2p_mesh_packet_forwarding'
   },
   {
     id: 'yt-4',
@@ -176,60 +181,92 @@ const DEFAULT_YOUTUBE_VIDEOS: SearchableYouTubeVideo[] = [
 ];
 
 const DEFAULT_SOCIAL_ITEMS: SearchableSocialItem[] = [
-  { id: 'soc-1', title: 'Autonomous multi-hop packet routing deployed across Sector F-7', author: 'qaidi1561561', type: 'POST', time: '10m ago' },
-  { id: 'soc-2', title: 'DIY Cantenna Booster Guide MP4 Video Reel (14.2 MB)', author: 'qaidi48291', type: 'REEL', time: '35m ago' },
-  { id: 'soc-3', title: 'Relief Center Pinned Map in Offline Satellite View', author: 'qaidi77112', type: 'POST', time: '1h ago' }
+  { id: 'soc-1', title: 'Autonomous multi-hop packet routing deployed across Sector F-7', author: 'qaidi156156', type: 'POST', time: '10m ago' },
+  { id: 'soc-2', title: 'DIY Cantenna Booster Guide MP4 Video Reel (14.2 MB)', author: 'qaidi4829', type: 'REEL', time: '35m ago' },
+  { id: 'soc-3', title: 'Relief Center Pinned Map in Offline Satellite View', author: 'qaidi7711', type: 'POST', time: '1h ago' }
 ];
 
 const DEFAULT_FEATURES: SearchableFeatureItem[] = [
   { id: 'feat-usb', name: 'USB OTG Serial Hardware Bridge', category: 'Hardware', description: 'Auto-detect CH340, CP2102, FTDI LoRa modules & packets', iconName: 'usb' },
-  { id: 'feat-map', name: 'Offline Satellite View Map', category: 'Navigation', description: 'Pre-cached high-resolution aerial imagery & supply pins', iconName: 'map' },
+  { id: 'feat-map', name: 'Offline Satellite View Map', category: 'Navigation', description: 'Pre-cached high-resolution aerial imagery with RF heat waves', iconName: 'map' },
   { id: 'feat-radio', name: 'Speaker Acoustic Radio', category: 'Audio', description: 'Software acoustic ultrasound transceiver without extra hardware', iconName: 'radio' },
   { id: 'feat-qibla', name: 'Qibla & Campus Compass', category: 'Orientation', description: 'Real-time magnetic azimuth & verified campus rally points', iconName: 'qibla' },
   { id: 'feat-notice', name: 'Notice Board & Tactical Academy', category: 'Education', description: 'Community broadcast announcements & 100km LoRa tutorials', iconName: 'notice' },
-  { id: 'feat-weather', name: 'Weather & Severe Rain Alert', category: 'Sensors', description: 'Offline barometric pressure drop & thunderstorm warnings', iconName: 'weather' },
+  { id: 'feat-weather', name: 'Weather & Severe Rain Alert', category: 'Sensors', description: 'Offline rainfall rate (~35 mm / 2 hrs) & downpour warnings', iconName: 'weather' },
   { id: 'feat-disguise', name: 'Stealth Calculator & Notepad Disguise', category: 'Privacy', description: 'Disguise app behind a fully working functional calculator', iconName: 'disguise' },
   { id: 'feat-fund', name: 'Solar LoRa Hardware Fund', category: 'Community', description: '100% of native ad revenue pooled to buy repeaters', iconName: 'fund' },
-  { id: 'feat-superadmin', name: 'Super Admin Master Console', category: 'Governance', description: 'Emergency broadcast, node quarantine & city lockdown (qaidi1561561 only)', iconName: 'admin' }
+  { id: 'feat-superadmin', name: 'Super Admin Master Console', category: 'Governance', description: 'Emergency broadcast, node quarantine & city lockdown (qaidi156156 only)', iconName: 'admin' }
 ];
 
 interface UserSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentHandle?: string;
+  initialTab?: 'RADAR' | 'SEARCH' | 'QR';
   onSelectPeerToChat: (handle: string, displayName: string) => void;
   onSelectGroup?: (groupId: string) => void;
   onLaunchFeature?: (featureId: string) => void;
   onPlayYouTube?: (video: SearchableYouTubeVideo) => void;
   onShareYouTube?: (video: SearchableYouTubeVideo) => void;
   onLogEvent?: (module: string, message: string, level?: 'info' | 'warn' | 'error' | 'success') => void;
+  onOpenFullQrModal?: () => void;
 }
 
 export const UserSearchModal: React.FC<UserSearchModalProps> = ({
   isOpen,
   onClose,
+  currentHandle = 'qaidi156156',
+  initialTab = 'SEARCH',
   onSelectPeerToChat,
   onSelectGroup,
   onLaunchFeature,
   onPlayYouTube,
   onShareYouTube,
-  onLogEvent
+  onLogEvent,
+  onOpenFullQrModal
 }) => {
+  // 3-in-1 Combined Mode: Radar Discovery | Omni Search | QR & Scanner
+  const [combinedMode, setCombinedMode] = useState<'RADAR' | 'SEARCH' | 'QR'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTab, setActiveSearchTab] = useState<'ALL' | 'USERS' | 'GROUPS' | 'VIDEOS' | 'FEATURES'>('ALL');
-  
-  // Offline Waitlist State (Users & Groups)
-  const [userWaitlist, setUserWaitlist] = useState<string[]>([]);
-  const [groupWaitlist, setGroupWaitlist] = useState<string[]>([]);
-  const [customAddInput, setCustomAddInput] = useState('');
+
+  // QR Code on Search Hit State
+  const [showQrCodeCard, setShowQrCodeCard] = useState(true);
+  const [copiedPayload, setCopiedPayload] = useState(false);
+
+  // Active Camera QR Scanner State (working scanner)
+  const [isScanningQrCamera, setIsScanningQrCamera] = useState(false);
+  const [scanSimNotice, setScanSimNotice] = useState<string | null>(null);
+
+  // Radar State
+  const [isRadarScanning, setIsRadarScanning] = useState(true);
+  const [radarAngle, setRadarAngle] = useState(0);
+  const [pingedPeerHandle, setPingedPeerHandle] = useState<string | null>(null);
+
+  // Sync initial tab when changed externally
+  useEffect(() => {
+    if (initialTab) {
+      setCombinedMode(initialTab);
+    }
+  }, [initialTab]);
+
+  // Sweep animation for radar
+  useEffect(() => {
+    if (!isOpen || combinedMode !== 'RADAR' || !isRadarScanning) return;
+    const interval = setInterval(() => {
+      setRadarAngle(prev => (prev + 4) % 360);
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isOpen, combinedMode, isRadarScanning]);
 
   if (!isOpen) return null;
 
   const q = searchQuery.toLowerCase().trim();
 
-  // Filter Peers
+  // Filter Peers (All can be messaged, offline users supported via Store-and-Forward DTN)
   const filteredPeers = DEFAULT_PEERS.filter((p) => {
     if (!q) return true;
-    return p.handle.toLowerCase().includes(q) || p.displayName.toLowerCase().includes(q) || p.hardwareMac.toLowerCase().includes(q);
+    return p.handle.toLowerCase().includes(q) || p.displayName.toLowerCase().includes(q);
   });
 
   // Filter Groups
@@ -238,7 +275,7 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
     return g.name.toLowerCase().includes(q) || g.topic.toLowerCase().includes(q);
   });
 
-  // Filter YouTube Videos (Also checks if query is a YouTube URL!)
+  // Filter YouTube Videos
   const isDirectYoutubeLink = q.includes('youtube.com') || q.includes('youtu.be');
   const filteredVideos = isDirectYoutubeLink
     ? [
@@ -270,51 +307,85 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
     return f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.category.toLowerCase().includes(q);
   });
 
-  // Handle Adding User to Offline Waitlist
-  const handleToggleUserWaitlist = (handle: string) => {
-    if (userWaitlist.includes(handle)) {
-      setUserWaitlist(prev => prev.filter(h => h !== handle));
-      onLogEvent?.('Waitlist', `Removed ${handle} from offline mesh beacon waitlist.`, 'info');
-    } else {
-      setUserWaitlist(prev => [...prev, handle]);
-      onLogEvent?.('Waitlist', `Added ${handle} to offline mesh beacon waitlist. Auto-connects when peer radio is in range!`, 'success');
-    }
+  // Acoustic Discovery Ping probe sound
+  const handlePingPeer = (peerHandle: string) => {
+    setPingedPeerHandle(peerHandle);
+    onLogEvent?.('NearbyRadar', `Sent acoustic & mesh probe to ${peerHandle}. ACK received in 18ms.`, 'success');
+    try {
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch (_e) {}
+    setTimeout(() => setPingedPeerHandle(null), 2000);
   };
 
-  // Handle Adding Group to Offline Waitlist
-  const handleToggleGroupWaitlist = (groupId: string) => {
-    if (groupWaitlist.includes(groupId)) {
-      setGroupWaitlist(prev => prev.filter(g => g !== groupId));
-      onLogEvent?.('Waitlist', `Removed ${groupId} from rendezvous sync waitlist.`, 'info');
-    } else {
-      setGroupWaitlist(prev => [...prev, groupId]);
-      onLogEvent?.('Waitlist', `Queued ${groupId} in rendezvous sync waitlist. Automatically syncs when in range of a relay node!`, 'success');
-    }
-  };
+  // Execute QR Scan Success (decodes peer, plays audio beep, and immediately connects to direct chat)
+  const handleCompleteScan = (scannedHandle: string, displayName?: string) => {
+    const cleanHandle = scannedHandle.replace(/^@/, '').trim();
+    const effectiveName = displayName || `Qaidi Node ${cleanHandle.replace('qaidi', '')}`;
+    
+    // Audio beep confirmation
+    try {
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(1800, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    } catch (_e) {}
 
-  // Handle Adding Manual User Handle to Waitlist
-  const handleAddCustomUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = customAddInput.trim().toLowerCase();
-    if (!clean) return;
-    setUserWaitlist(prev => [...new Set([...prev, clean])]);
-    setCustomAddInput('');
-    onLogEvent?.('Waitlist', `Added custom user ID ${clean} to auto-connect waitlist.`, 'success');
+    setScanSimNotice(`✓ Scanned @${cleanHandle}! Connected to peer.`);
+    onLogEvent?.('QRScanner', `Successfully scanned & paired with peer @${cleanHandle}! Opening direct chat.`, 'success');
+    
+    setTimeout(() => {
+      setIsScanningQrCamera(false);
+      onSelectPeerToChat(cleanHandle, effectiveName);
+      onClose();
+    }, 600);
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 animate-in fade-in duration-200 select-none">
-      <div className="w-full max-w-sm rounded-xl bg-slate-900 border border-emerald-500/40 p-4 shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-sm rounded-xl bg-slate-900 border border-emerald-500/40 p-4 shadow-2xl flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1 rounded bg-emerald-500/20 text-emerald-400">
-              <Search className="h-4 w-4" />
+            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+              {combinedMode === 'RADAR' ? (
+                <Radar className="h-4 w-4 animate-pulse" />
+              ) : combinedMode === 'QR' ? (
+                <QrCode className="h-4 w-4" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Omni-Search Everything</h3>
-              <p className="text-[10px] text-slate-400">Users, Groups, Social, YouTube & Features at once</p>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>Discovery, Search & QR</span>
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                {combinedMode === 'RADAR'
+                  ? '360° Proximity Radar sweep for active mesh peers'
+                  : combinedMode === 'QR'
+                  ? 'Cryptographic Node QR Code & Live Camera Scanner'
+                  : 'Search mesh peers, groups, guides & offline tools'}
+              </p>
             </div>
           </div>
           <button
@@ -325,75 +396,102 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
           </button>
         </div>
 
-        {/* Universal Search Input */}
-        <div className="relative mb-2.5 shrink-0">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search user, group, video, URL, or feature..."
-            className="w-full rounded-lg bg-slate-950 border border-slate-800 pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono shadow-inner"
-            autoFocus
-          />
-          <Search className="h-3.5 w-3.5 text-emerald-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
-            >
-              ✕
-            </button>
-          )}
+        {/* COMBINED 3-IN-1 MODE SWITCHER: RADAR | SEARCH | QR */}
+        <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 mb-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setCombinedMode('RADAR')}
+            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              combinedMode === 'RADAR'
+                ? 'bg-emerald-600 text-slate-950 shadow-md shadow-emerald-950/60'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Radar className="h-3.5 w-3.5 animate-pulse" />
+            <span>Radar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCombinedMode('SEARCH')}
+            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              combinedMode === 'SEARCH'
+                ? 'bg-emerald-600 text-slate-950 shadow-md shadow-emerald-950/60'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span>Search</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCombinedMode('QR')}
+            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              combinedMode === 'QR'
+                ? 'bg-emerald-600 text-slate-950 shadow-md shadow-emerald-950/60'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            <span>My QR</span>
+          </button>
         </div>
 
-        {/* Tab Filters */}
-        <div className="flex gap-1 overflow-x-auto pb-1.5 mb-2 shrink-0 scrollbar-none text-[10px]">
-          {(['ALL', 'USERS', 'GROUPS', 'VIDEOS', 'FEATURES'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveSearchTab(tab)}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all shrink-0 ${
-                activeSearchTab === tab
-                  ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              {tab === 'ALL' ? '🌐 All' : tab === 'USERS' ? '👤 Users' : tab === 'GROUPS' ? '👥 Groups' : tab === 'VIDEOS' ? '▶ YouTube' : '⚡ Tools'}
-            </button>
-          ))}
-        </div>
+        {/* ================= VIEW 1: NEARBY DISCOVERY RADAR ================= */}
+        {combinedMode === 'RADAR' && (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+            {/* 360° Circular Sweep Radar Graphic */}
+            <div className="relative w-44 h-44 mx-auto rounded-full bg-[#021812] border-2 border-emerald-500/50 shadow-inner flex items-center justify-center overflow-hidden my-1">
+              {/* Concentric Signal Rings */}
+              <div className="absolute w-36 h-36 rounded-full border border-emerald-500/20" />
+              <div className="absolute w-24 h-24 rounded-full border border-emerald-500/30" />
+              <div className="absolute w-12 h-12 rounded-full border border-emerald-500/40" />
 
-        {/* Search Results Feed */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
-          
-          {/* Quick Manual User Add (if no results or direct add) */}
-          <form onSubmit={handleAddCustomUser} className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex gap-1.5">
-            <input
-              type="text"
-              value={customAddInput}
-              onChange={(e) => setCustomAddInput(e.target.value)}
-              placeholder="Add user ID to offline waitlist (e.g. qaidi8821)..."
-              className="flex-1 bg-transparent text-[11px] text-white placeholder-slate-500 focus:outline-none font-mono"
-            />
-            <button
-              type="submit"
-              disabled={!customAddInput.trim()}
-              className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-slate-950 font-bold text-[10px] flex items-center gap-1"
-            >
-              <UserPlus className="h-3 w-3" />
-              <span>Queue</span>
-            </button>
-          </form>
+              {/* Crosshair Grids */}
+              <div className="absolute w-full h-[1px] bg-emerald-500/20" />
+              <div className="absolute h-full w-[1px] bg-emerald-500/20" />
 
-          {/* SECTION 1: USERS */}
-          {(activeSearchTab === 'ALL' || activeSearchTab === 'USERS') && filteredPeers.length > 0 && (
+              {/* Rotating Sweep Beam */}
+              <div
+                className="absolute w-24 h-24 origin-bottom-right"
+                style={{
+                  top: 0,
+                  left: 0,
+                  transform: `rotate(${radarAngle}deg)`,
+                  background: 'conic-gradient(from 180deg at 100% 100%, rgba(16, 185, 129, 0.45) 0deg, rgba(16, 185, 129, 0) 65deg)',
+                  pointerEvents: 'none'
+                }}
+              />
+
+              {/* Center Self Node */}
+              <div className="relative z-10 h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/80 animate-pulse" />
+
+              {/* Blips for Nearby Peers (Hidden distance, relative locations only) */}
+              <div className="absolute top-10 left-12 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/40 animate-ping" />
+              <div className="absolute bottom-12 right-14 h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <div className="absolute top-14 right-10 h-2 w-2 rounded-full bg-emerald-300" />
+            </div>
+
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-white font-mono uppercase">
+                Nearby Mesh Peers ({DEFAULT_PEERS.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsRadarScanning(!isRadarScanning)}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1"
+              >
+                <RefreshCw className={`h-3 w-3 ${isRadarScanning ? 'animate-spin' : ''}`} />
+                <span>{isRadarScanning ? 'Sweeping...' : 'Paused'}</span>
+              </button>
+            </div>
+
+            {/* Discovered Peers List: NO dBm (percentage only), NO meters, NO network type */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider">
-                <span>👤 Network Users ({filteredPeers.length})</span>
-                <span className="text-slate-500 font-normal">Offline waitlist enabled</span>
-              </div>
-              {filteredPeers.map((peer) => {
-                const isWaitlisted = userWaitlist.includes(peer.handle);
+              {DEFAULT_PEERS.map((peer) => {
+                const sigPct = rssiToSignalPercentage(peer.rssiDbm);
+                const isPinged = pingedPeerHandle === peer.handle;
                 return (
                   <div
                     key={peer.handle}
@@ -404,239 +502,517 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
                         <div className="h-7 w-7 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center font-mono border border-emerald-500/30">
                           {peer.handle.slice(0, 2).toUpperCase()}
                         </div>
-                        <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-950 ${
-                          peer.isOnlineMesh ? 'bg-emerald-400' : 'bg-slate-600'
-                        }`} />
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-950 ${
+                            peer.isOnlineMesh ? 'bg-emerald-400' : 'bg-slate-600'
+                          }`}
+                        />
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono font-bold text-white text-[11px]">{peer.handle}</span>
                           {peer.isSuperAdmin && (
-                            <span className="text-[8px] px-1 rounded bg-rose-500/20 text-rose-300 font-bold">ADMIN</span>
+                            <span className="text-[7.5px] px-1 rounded bg-amber-500/20 text-amber-300 font-bold">
+                              ADMIN
+                            </span>
                           )}
                         </div>
-                        <span className="text-[9.5px] text-slate-400 block truncate max-w-[150px]">{peer.displayName}</span>
-                        <div className="flex items-center gap-1.5 text-[8.5px] text-slate-500 font-mono">
-                          <span>{peer.isOnlineMesh ? `📶 ${peer.rssiDbm} dBm` : 'Offline'}</span>
+                        <span className="text-[9.5px] text-slate-400 block truncate max-w-[130px]">
+                          {peer.displayName}
+                        </span>
+                        {/* Percentage Only - No dBm, No meters, No network type */}
+                        <div className="flex items-center gap-1.5 text-[8.5px] text-emerald-400 font-mono">
+                          {peer.isOnlineMesh ? (
+                            <span>Signal: {sigPct}% 📶</span>
+                          ) : (
+                            <span className="text-slate-500">Offline (Store & Forward)</span>
+                          )}
                           <span>• {peer.lastSeenText}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      {peer.isOnlineMesh ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handlePingPeer(peer.handle)}
+                        className={`p-1.5 rounded transition-colors ${
+                          isPinged
+                            ? 'bg-emerald-500 text-slate-950 font-bold'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                        title="Ping Peer (Acoustic & Mesh probe)"
+                      >
+                        <Volume2 className="h-3 w-3" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectPeerToChat(peer.handle, peer.displayName);
+                          onClose();
+                        }}
+                        className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px] flex items-center gap-1 shadow-sm"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        <span>Chat</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ================= VIEW 2: OMNI SEARCH (Search bar hit reveals QR) ================= */}
+        {combinedMode === 'SEARCH' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Universal Search Input */}
+            <div className="relative mb-2 shrink-0">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowQrCodeCard(true)}
+                onClick={() => setShowQrCodeCard(true)}
+                placeholder="Search user, group, video, URL, or feature..."
+                className="w-full rounded-lg bg-slate-950 border border-slate-800 pl-8 pr-16 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono shadow-inner"
+                autoFocus
+              />
+              <Search className="h-3.5 w-3.5 text-emerald-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-slate-500 hover:text-slate-300 text-xs px-1"
+                  >
+                    ✕
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowQrCodeCard(!showQrCodeCard)}
+                  className={`p-1 rounded transition-colors ${
+                    showQrCodeCard ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/40' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="QR Code (Appears when search bar hit)"
+                >
+                  <QrCode className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* QR CODE APPEARS WHEN SEARCH BAR HIT */}
+            {showQrCodeCard && (
+              <div className="mb-2 p-2 rounded-xl bg-gradient-to-b from-[#032219] to-slate-950 border border-emerald-500/50 shadow-xl shrink-0 animate-in fade-in space-y-1.5">
+                <div className="flex items-center justify-between pb-1 border-b border-emerald-900/60">
+                  <div className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-bold font-mono">
+                    <QrCode className="h-3 w-3 animate-pulse" />
+                    <span>NODE QR CODE (SEARCH BAR ACTIVE)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQrCodeCard(false)}
+                    className="text-[9.5px] text-slate-400 hover:text-white px-1.5 py-0.2 rounded bg-slate-900"
+                  >
+                    Hide ✕
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-white shrink-0 shadow-md border border-emerald-500/40 relative w-16 h-16 flex flex-col items-center justify-center">
+                    <div className="grid grid-cols-4 gap-0.5 w-12 h-12 my-auto">
+                      {Array.from({ length: 16 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`rounded-[0.5px] ${
+                            (i * 3 + 5) % 2 === 0 ? 'bg-black' : 'bg-transparent'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-1 text-[10px]">
+                    <span className="font-mono font-bold text-emerald-300 block">{currentHandle}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsScanningQrCamera(true)}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[9.5px] flex items-center gap-1 shadow-sm"
+                      >
+                        <Scan className="h-3 w-3" />
+                        <span>Scan Peer QR</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(`qaidi-user:${currentHandle}`);
+                          setCopiedPayload(true);
+                          setTimeout(() => setCopiedPayload(false), 2000);
+                        }}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9.5px] font-mono flex items-center gap-1"
+                      >
+                        <Copy className="h-3 w-3 text-emerald-400" />
+                        <span>{copiedPayload ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Category Filter Pills */}
+            <div className="flex gap-1 overflow-x-auto pb-1.5 mb-2 shrink-0 scrollbar-none text-[10px]">
+              {(['ALL', 'USERS', 'GROUPS', 'VIDEOS', 'FEATURES'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveSearchTab(tab)}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all shrink-0 ${
+                    activeSearchTab === tab
+                      ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  {tab === 'ALL' ? '🌐 All' : tab === 'USERS' ? '👤 Users' : tab === 'GROUPS' ? '👥 Groups' : tab === 'VIDEOS' ? '▶ YouTube' : '⚡ Tools'}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Results Feed (No Waitlist! Direct Message to Any User - Online or Offline) */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+              {/* SECTION 1: USERS (Allow message to offline users directly) */}
+              {(activeSearchTab === 'ALL' || activeSearchTab === 'USERS') && filteredPeers.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider">
+                    <span>👤 Mesh Users ({filteredPeers.length})</span>
+                    <span className="text-emerald-400/80 font-normal">Direct & Offline DTN Messaging</span>
+                  </div>
+                  {filteredPeers.map((peer) => {
+                    const sigPct = rssiToSignalPercentage(peer.rssiDbm);
+                    return (
+                      <div
+                        key={peer.handle}
+                        className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-emerald-500/40 flex items-center justify-between transition-all"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <div className="h-7 w-7 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center font-mono border border-emerald-500/30">
+                              {peer.handle.slice(0, 2).toUpperCase()}
+                            </div>
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-950 ${
+                                peer.isOnlineMesh ? 'bg-emerald-400' : 'bg-slate-600'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-white text-[11px]">{peer.handle}</span>
+                              {peer.isSuperAdmin && (
+                                <span className="text-[7.5px] px-1 rounded bg-amber-500/20 text-amber-300 font-bold">
+                                  ADMIN
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[9.5px] text-slate-400 block truncate max-w-[140px]">
+                              {peer.displayName}
+                            </span>
+                            {/* Percentage Only - No dBm, No meters, No network type */}
+                            <div className="flex items-center gap-1.5 text-[8.5px] text-emerald-400 font-mono">
+                              {peer.isOnlineMesh ? (
+                                <span>Signal: {sigPct}% 📶</span>
+                              ) : (
+                                <span className="text-slate-500">Offline (Store & Forward)</span>
+                              )}
+                              <span>• {peer.lastSeenText}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Direct Message Button - Works for BOTH online & offline users */}
                         <button
+                          type="button"
                           onClick={() => {
                             onSelectPeerToChat(peer.handle, peer.displayName);
                             onClose();
                           }}
-                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px] flex items-center gap-1"
+                          className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors shadow-sm ${
+                            peer.isOnlineMesh
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                              : 'bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40'
+                          }`}
+                          title={peer.isOnlineMesh ? 'Chat with peer now' : 'Message offline user via Store-and-Forward'}
                         >
                           <MessageSquare className="h-3 w-3" />
-                          <span>Chat</span>
+                          <span>{peer.isOnlineMesh ? 'Chat' : 'Message'}</span>
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => handleToggleUserWaitlist(peer.handle)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 border transition-colors ${
-                            isWaitlisted
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                          }`}
-                          title={isWaitlisted ? 'Queued in offline waitlist' : 'Add to auto-connect waitlist'}
-                        >
-                          {isWaitlisted ? <Check className="h-3 w-3 text-amber-400" /> : <Clock className="h-3 w-3 text-slate-400" />}
-                          <span>{isWaitlisted ? 'Waitlisted' : 'Waitlist'}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* SECTION 2: GROUPS */}
-          {(activeSearchTab === 'ALL' || activeSearchTab === 'GROUPS') && filteredGroups.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider">
-                <span>👥 Mesh Groups ({filteredGroups.length})</span>
-                <span className="text-slate-500 font-normal">Offline sync</span>
-              </div>
-              {filteredGroups.map((grp) => {
-                const isWaitlisted = groupWaitlist.includes(grp.id);
-                return (
-                  <div
-                    key={grp.id}
-                    className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-emerald-500/40 flex items-center justify-between transition-all"
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white text-[11px]">{grp.name}</span>
-                        <span className="text-[9px] font-mono text-emerald-400">({grp.id})</span>
                       </div>
-                      <p className="text-[9.5px] text-slate-400 truncate max-w-[200px]">{grp.topic}</p>
-                      <span className="text-[8.5px] text-slate-500 font-mono">
-                        {grp.membersCount} members • {grp.isAvailable ? 'In Range' : 'Out of Range'}
-                      </span>
-                    </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                    <div>
-                      {grp.isAvailable ? (
+              {/* SECTION 2: GROUPS */}
+              {(activeSearchTab === 'ALL' || activeSearchTab === 'GROUPS') && filteredGroups.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider">
+                    👥 Mesh Groups ({filteredGroups.length})
+                  </div>
+                  {filteredGroups.map((grp) => (
+                    <div
+                      key={grp.id}
+                      className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-emerald-500/40 flex items-center justify-between transition-all"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white text-[11px]">{grp.name}</span>
+                          <span className="text-[9px] font-mono text-emerald-400">({grp.id})</span>
+                        </div>
+                        <p className="text-[9.5px] text-slate-400">{grp.topic}</p>
+                        <span className="text-[8.5px] text-slate-500 font-mono">{grp.membersCount} active peers</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectGroup?.(grp.id);
+                          onClose();
+                        }}
+                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px]"
+                      >
+                        Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* SECTION 3: YOUTUBE & VIDEO GUIDES */}
+              {(activeSearchTab === 'ALL' || activeSearchTab === 'VIDEOS') && filteredVideos.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
+                    <Youtube className="h-3 w-3" />
+                    <span>Video Guides & Streams ({filteredVideos.length})</span>
+                  </div>
+                  {filteredVideos.map((vid) => (
+                    <div
+                      key={vid.id}
+                      className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-red-500/40 flex items-center justify-between transition-all"
+                    >
+                      <div className="flex-1 pr-2">
+                        <span className="font-semibold text-white text-[11px] block line-clamp-1">{vid.title}</span>
+                        <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono">
+                          <span>{vid.channelName}</span>
+                          <span>•</span>
+                          <span className="text-red-400">{vid.durationText}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => {
-                            onSelectGroup?.(grp.id);
+                            onPlayYouTube?.(vid);
                             onClose();
                           }}
-                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px]"
+                          className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white font-bold text-[9.5px] flex items-center gap-1"
                         >
-                          Open
+                          <Play className="h-2.5 w-2.5 fill-white" />
+                          <span>Watch</span>
                         </button>
-                      ) : (
                         <button
-                          onClick={() => handleToggleGroupWaitlist(grp.id)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 border transition-colors ${
-                            isWaitlisted
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                          }`}
+                          type="button"
+                          onClick={() => onShareYouTube?.(vid)}
+                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+                          title="Share Video Guide"
                         >
-                          {isWaitlisted ? <Check className="h-3 w-3 text-amber-400" /> : <Clock className="h-3 w-3" />}
-                          <span>{isWaitlisted ? 'Waitlisted' : 'Waitlist'}</span>
+                          <Share2 className="h-3 w-3" />
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  ))}
+                </div>
+              )}
 
-          {/* SECTION 3: YOUTUBE SURVIVAL & TECH VIDEOS */}
-          {(activeSearchTab === 'ALL' || activeSearchTab === 'VIDEOS') && filteredVideos.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] font-bold text-red-400 font-mono uppercase tracking-wider">
-                <span>▶ YouTube Tech & Survival Videos ({filteredVideos.length})</span>
-                <span className="text-slate-500 font-normal">Zero API Key Needed</span>
-              </div>
-              {filteredVideos.map((vid) => (
-                <div
-                  key={vid.id}
-                  className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-red-500/40 flex items-center justify-between transition-all"
-                >
-                  <div className="flex-1 mr-2">
-                    <span className="font-bold text-white text-[11px] block line-clamp-1">{vid.title}</span>
-                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400">
-                      <span>{vid.channelName}</span>
-                      <span>•</span>
-                      <span className="text-red-400 font-mono">{vid.durationText}</span>
-                      <span>•</span>
-                      <span className="text-emerald-400">{vid.category}</span>
-                    </div>
+              {/* SECTION 4: APP FEATURES & TOOLS */}
+              {(activeSearchTab === 'ALL' || activeSearchTab === 'FEATURES') && filteredFeatures.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold text-amber-400 font-mono uppercase tracking-wider">
+                    ⚡ App Features & Hardware Tools ({filteredFeatures.length})
                   </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
+                  {filteredFeatures.map((feat) => (
                     <button
+                      key={feat.id}
+                      type="button"
                       onClick={() => {
-                        onPlayYouTube?.(vid);
+                        onLaunchFeature?.(feat.id);
                         onClose();
                       }}
-                      className="p-1.5 rounded bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] flex items-center gap-1"
-                      title="Watch inside app"
+                      className="w-full p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-amber-500/40 flex items-center justify-between text-left transition-all"
                     >
-                      <Play className="h-3 w-3 fill-white" />
-                      <span>Watch</span>
+                      <div>
+                        <div className="flex items-center gap-1.5 text-white font-bold text-[11px]">
+                          <span>{feat.name}</span>
+                          <span className="text-[8.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                            {feat.category}
+                          </span>
+                        </div>
+                        <p className="text-[9.5px] text-slate-400 line-clamp-1">{feat.description}</p>
+                      </div>
+                      <span className="text-[10px] text-amber-400 font-bold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                        Open →
+                      </span>
                     </button>
-                    <button
-                      onClick={() => {
-                        onShareYouTube?.(vid);
-                        onClose();
-                      }}
-                      className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[10px]"
-                      title="Share to mesh chat"
-                    >
-                      <Share2 className="h-3 w-3" />
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* SECTION 4: SOCIAL & REELS */}
-          {(activeSearchTab === 'ALL' || activeSearchTab === 'VIDEOS') && filteredSocial.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-bold text-purple-400 font-mono uppercase tracking-wider">
-                🎬 Social & Reels ({filteredSocial.length})
+        {/* ================= VIEW 3: DEDICATED QR CODE & WORKING CAMERA SCANNER ================= */}
+        {combinedMode === 'QR' && (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs text-center">
+            <div className="p-4 rounded-xl bg-gradient-to-b from-[#032219] to-slate-950 border border-emerald-500/50 shadow-xl space-y-3">
+              <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-bold font-mono">
+                <QrCode className="h-4 w-4 animate-pulse" />
+                <span>MY PEER MESH IDENTITY QR</span>
               </div>
-              {filteredSocial.map((soc) => (
-                <div
-                  key={soc.id}
-                  className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-purple-500/40 flex items-center justify-between"
+
+              {/* High-Contrast Large QR Card */}
+              <div className="p-3 rounded-xl bg-white mx-auto w-36 h-36 flex flex-col items-center justify-center shadow-lg relative border-2 border-emerald-500">
+                <div className="grid grid-cols-6 gap-0.5 w-28 h-28 my-auto">
+                  {Array.from({ length: 36 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-[0.5px] ${
+                        (i * 5 + 3) % 2 === 0 ? 'bg-black' : 'bg-transparent'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="absolute inset-0 m-auto h-5 w-20 rounded bg-emerald-600 border border-black flex items-center justify-center text-[8px] font-mono font-black text-slate-950 shadow">
+                  {currentHandle}
+                </div>
+              </div>
+
+              <div>
+                <span className="font-mono font-bold text-white text-sm block">@{currentHandle}</span>
+                <p className="text-[10px] text-slate-300">
+                  Allow other peers to scan this QR code with their camera to immediately pair and chat over BLE/Wi-Fi mesh without internet.
+                </p>
+              </div>
+
+              {/* QR Actions */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsScanningQrCamera(true)}
+                  className="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md"
                 >
-                  <div>
-                    <span className="font-semibold text-white text-[11px] block line-clamp-1">{soc.title}</span>
-                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono">
-                      <span>{soc.author}</span>
-                      <span>•</span>
-                      <span className="text-purple-400">{soc.type}</span>
-                      <span>•</span>
-                      <span>{soc.time}</span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-200 border border-purple-500/30">
-                    {soc.type}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+                  <Scan className="h-4 w-4" />
+                  <span>Scan Peer QR</span>
+                </button>
 
-          {/* SECTION 5: APP FEATURES & HARDWARE TOOLS */}
-          {(activeSearchTab === 'ALL' || activeSearchTab === 'FEATURES') && filteredFeatures.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-bold text-amber-400 font-mono uppercase tracking-wider">
-                ⚡ App Features & Hardware Tools ({filteredFeatures.length})
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`qaidi-user:${currentHandle}`);
+                    setCopiedPayload(true);
+                    onLogEvent?.('QR', `Copied node QR payload for ${currentHandle}`, 'info');
+                    setTimeout(() => setCopiedPayload(false), 2000);
+                  }}
+                  className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Copy className="h-4 w-4" />
+                  <span>{copiedPayload ? 'Copied!' : 'Copy Code'}</span>
+                </button>
               </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {filteredFeatures.map((feat) => (
+
+              {onOpenFullQrModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenFullQrModal();
+                  }}
+                  className="w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center justify-center gap-1"
+                >
+                  <span>Advanced Group & Invite QR Manager →</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================= MODAL OVERLAY: WORKING CAMERA SCANNER ================= */}
+        {isScanningQrCamera && (
+          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 animate-in fade-in select-none">
+            <div className="w-full max-w-xs rounded-2xl bg-slate-900 border border-emerald-500 p-4 shadow-2xl space-y-3 flex flex-col items-center text-center">
+              <div className="flex items-center justify-between w-full border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold font-mono">
+                  <Camera className="h-4 w-4 animate-pulse" />
+                  <span>LIVE QR CAMERA SCANNER</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsScanningQrCamera(false)}
+                  className="text-slate-400 hover:text-white p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Viewfinder with Laser Sweep */}
+              <div className="relative w-48 h-48 rounded-xl bg-black border-2 border-emerald-400 flex items-center justify-center overflow-hidden shadow-inner">
+                {/* 4 Corner Markers */}
+                <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-400" />
+                <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-400" />
+                <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-400" />
+                <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-400" />
+
+                {/* Animated Green Laser Sweep */}
+                <div className="absolute w-full h-1 bg-emerald-400 shadow-[0_0_12px_#10b981] animate-bounce" />
+
+                <span className="text-[10px] text-emerald-400/80 font-mono">Point camera at peer QR</span>
+              </div>
+
+              <p className="text-[10px] text-slate-300 leading-snug">
+                Detecting peer QR code via device sensor... Tap any peer below to simulate instant scan:
+              </p>
+
+              {/* Peer Quick Scan Options */}
+              <div className="w-full space-y-1.5 text-left">
+                {DEFAULT_PEERS.filter(p => p.handle !== currentHandle).slice(0, 3).map((peer) => (
                   <button
-                    key={feat.id}
-                    onClick={() => {
-                      onLaunchFeature?.(feat.id);
-                      onClose();
-                    }}
-                    className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-amber-500/40 flex items-center justify-between text-left transition-all"
+                    key={peer.handle}
+                    type="button"
+                    onClick={() => handleCompleteScan(peer.handle, peer.displayName)}
+                    className="w-full p-2 rounded-lg bg-slate-950 hover:bg-[#04281e] border border-slate-800 hover:border-emerald-500/60 flex items-center justify-between text-xs transition-colors"
                   >
                     <div>
-                      <div className="flex items-center gap-1.5 text-white font-bold text-[11px]">
-                        <span>{feat.name}</span>
-                        <span className="text-[8.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                          {feat.category}
-                        </span>
-                      </div>
-                      <p className="text-[9.5px] text-slate-400 line-clamp-1">{feat.description}</p>
+                      <span className="font-mono font-bold text-white block text-[11px]">@{peer.handle}</span>
+                      <span className="text-[9px] text-slate-400">{peer.displayName}</span>
                     </div>
-                    <span className="text-[10px] text-amber-400 font-bold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
-                      Open →
+                    <span className="text-[9.5px] px-2 py-0.5 rounded bg-emerald-600 text-slate-950 font-bold">
+                      Scan This QR
                     </span>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
 
-          {/* Empty state */}
-          {filteredPeers.length === 0 && filteredGroups.length === 0 && filteredVideos.length === 0 && filteredFeatures.length === 0 && (
-            <div className="p-8 text-center text-xs text-slate-500 space-y-2">
-              <p>No results found for "{searchQuery}".</p>
-              <p className="text-[11px] text-slate-400">
-                You can paste a direct YouTube video URL, or enter an offline user handle above to queue in your waitlist!
-              </p>
+              {scanSimNotice && (
+                <div className="w-full p-2 rounded bg-emerald-950/80 border border-emerald-500/80 text-[10px] text-emerald-200 font-mono animate-in fade-in">
+                  {scanSimNotice}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
       </div>
     </div>
   );

@@ -18,11 +18,11 @@ import {
   PrivateNicknameMap
 } from './authAndIdentity.ts';
 
-test('Super Admin is strictly locked to qaidi1561561 and rejects all others', () => {
-  assert.equal(isGlobalSuperAdmin('qaidi1561561'), true);
-  assert.equal(isGlobalSuperAdmin('@qaidi1561561'), true);
-  assert.equal(isGlobalSuperAdmin('Qaidi1561561'), true);
-  assert.equal(isSuperAdminAuthenticated('qaidi1561561'), true);
+test('Super Admin is strictly locked to qaidi156156 and rejects all others', () => {
+  assert.equal(isGlobalSuperAdmin('qaidi156156'), true);
+  assert.equal(isGlobalSuperAdmin('@qaidi156156'), true);
+  assert.equal(isGlobalSuperAdmin('Qaidi156156'), true);
+  assert.equal(isSuperAdminAuthenticated('qaidi156156'), true);
   
   // Previous handle must now be rejected
   assert.equal(isGlobalSuperAdmin('qaidi156'), false);
@@ -31,9 +31,9 @@ test('Super Admin is strictly locked to qaidi1561561 and rejects all others', ()
   assert.equal(isGlobalSuperAdmin('qaidi9999'), false);
 });
 
-test('Only qaidi1561561 can promote others to Admin or Super Admin', () => {
-  assert.equal(canPromoteToSuperAdmin('qaidi1561561'), true);
-  assert.equal(canPromoteToSuperAdmin('@qaidi1561561'), true);
+test('Only qaidi156156 can promote others to Admin or Super Admin', () => {
+  assert.equal(canPromoteToSuperAdmin('qaidi156156'), true);
+  assert.equal(canPromoteToSuperAdmin('@qaidi156156'), true);
   assert.equal(canPromoteToSuperAdmin('qaidi156'), false);
   assert.equal(canPromoteToSuperAdmin('qaidi4001'), false);
   assert.equal(canPromoteToSuperAdmin('regular_user'), false);
@@ -134,8 +134,8 @@ test('Global Emergency Broadcast creates critical-high priority packet and reach
   assert.ok(result.logSummary.includes('[GLOBAL EMERGENCY BROADCAST]'));
 });
 
-test('Super Admin tools are strictly restricted to qaidi1561561 and blocked for non-super-admins', () => {
-  const superAdminHandle = 'qaidi1561561';
+test('Super Admin tools are strictly restricted to qaidi156156 and blocked for non-super-admins', () => {
+  const superAdminHandle = 'qaidi156156';
   const regularHandles = ['qaidi48291', 'qaidi77110', 'user_admin', 'qaidi156', 'qaidi9052'];
 
   assert.equal(isSuperAdminAuthenticated(superAdminHandle), true);

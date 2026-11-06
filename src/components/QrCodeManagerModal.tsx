@@ -52,7 +52,7 @@ export const QrCodeManagerModal: React.FC<QrCodeManagerModalProps> = ({
   if (!isOpen) return null;
 
   const selectedGroup = groups.find(g => g.id === selectedGroupId) || groups[0];
-  const isGroupAdmin = selectedGroup ? (selectedGroup.admins.includes(identityHandle) || identityHandle === 'qaidi1561561') : false;
+  const isGroupAdmin = selectedGroup ? (selectedGroup.admins.includes(identityHandle) || identityHandle === 'qaidi156156') : false;
 
   const myQrPayload = `qaidi-user:${identityHandle}?pubkey=02ff${identityHandle.slice(-4)}a19c`;
   const groupQrPayload = selectedGroup

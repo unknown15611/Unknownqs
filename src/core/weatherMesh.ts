@@ -64,8 +64,8 @@ export function generateRainAlerts(weather: WeatherCondition, dropDeltaHpa: numb
     alerts.push({
       id: `rain-${Date.now()}`,
       severity: 'CRITICAL',
-      headline: 'Heavy Rain & Thunderstorm Alert',
-      message: `Rapid pressure drop (-${dropDeltaHpa} hPa) detected in ${weather.locationName}. High precipitation expected within 15-30 minutes. Secure gear and avoid low-lying river beds.`,
+      headline: 'Heavy Rain & Thunderstorm Alert (~35-45 mm / 2 hrs)',
+      message: `Severe downpour alert in ${weather.locationName}: ~35 mm to 45 mm rain expected within the next 2 hours. Flash flooding risk in low-lying roads. Secure gear and seek higher ground.`,
       expectedInMinutes: 20,
       timestamp: Date.now(),
       isMeshBroadcast: true,

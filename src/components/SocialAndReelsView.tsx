@@ -35,9 +35,37 @@ import {
   Maximize2,
   Minimize2,
   Music,
-  Disc3
+  Disc3,
+  Lock,
+  Unlock,
+  Folder,
+  Users,
+  UserCheck,
+  Trash2
 } from 'lucide-react';
 import { shouldInsertReelAd, filterContentUnderIslamicLaw, ISLAMIC_LAW_BLOCK_MESSAGE } from '../core/adminAndAds';
+import { MeshGroupSim } from '../data/simulatedMeshState';
+
+export function getRegionalTimeString(date: Date = new Date(), region: string = 'Pakistan'): string {
+  try {
+    const timeZone = region.includes('Pakistan') ? 'Asia/Karachi' : Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Karachi';
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZoneName: 'short'
+    });
+    return formatter.format(date).replace(',', '') + ' (' + region + ' Time)';
+  } catch (_e) {
+    const local = new Date(date.getTime() + 5 * 60 * 60 * 1000);
+    return local.toISOString().replace('T', ' ').substring(0, 19) + ' PKT (Pakistan Time)';
+  }
+}
 
 export interface PostComment {
   id: string;
@@ -62,6 +90,8 @@ export interface SocialPost {
   comments?: PostComment[];
   isSponsoredAd?: boolean;
   adUnitId?: string;
+  allowSharing?: boolean; // Only author has right to enable or disable sharing!
+  sharedFromGroup?: string; // If post was shared from a mesh group
   watermarkBadge?: {
     platform: string;
     timestamp: string;
@@ -84,13 +114,15 @@ export interface YouTubeFeedItem {
 const INITIAL_SOCIAL_POSTS: SocialPost[] = [
   {
     id: 'post-1',
-    authorHandle: 'qaidi1561561',
-    authorDisplayName: 'Qaidi Node 1561561',
+    authorHandle: 'qaidi156156',
+    authorDisplayName: 'Qaidi Node 156156',
     createdAtText: '10m ago',
     content: '⚡ Autonomous multi-hop packet routing deployed. Frequency hopping protocol active across all district nodes. Keep radios active!',
     likesCount: 142,
     isLiked: false,
     commentsCount: 3,
+    allowSharing: true,
+    sharedFromGroup: 'Tactical Mesh Ops',
     comments: [
       { id: 'c-1', authorHandle: 'qaidi7711', createdAtText: '8m ago', text: 'Confirmed in Sector F-7. Packets routing with 0% loss.' },
       { id: 'c-2', authorHandle: 'qaidi3390', createdAtText: '5m ago', text: 'First-aid post active near campus quad.' },
@@ -107,6 +139,7 @@ const INITIAL_SOCIAL_POSTS: SocialPost[] = [
     adUnitId: 'ca-app-pub-3283420350176268/4797966805',
     likesCount: 5,
     commentsCount: 0,
+    allowSharing: true
   },
   {
     id: 'post-2',
@@ -120,9 +153,10 @@ const INITIAL_SOCIAL_POSTS: SocialPost[] = [
     likesCount: 89,
     isLiked: false,
     commentsCount: 2,
+    allowSharing: true,
     comments: [
       { id: 'c-201', authorHandle: 'qaidi3390', createdAtText: '20m ago', text: 'Built this yesterday with a Nido can, gained +14dBi immediately!' },
-      { id: 'c-202', authorHandle: 'qaidi1561561', createdAtText: '12m ago', text: 'Make sure probe length is strictly 31mm.' }
+      { id: 'c-202', authorHandle: 'qaidi156156', createdAtText: '12m ago', text: 'Make sure probe length is strictly 31mm.' }
     ],
     watermarkBadge: {
       platform: 'Hardware Radio Verified',
@@ -142,6 +176,7 @@ const INITIAL_SOCIAL_POSTS: SocialPost[] = [
     likesCount: 230,
     isLiked: false,
     commentsCount: 1,
+    allowSharing: false, // Author qaidi7711 has locked sharing - only author has right to enable
     comments: [
       { id: 'c-301', authorHandle: 'qaidi4829', createdAtText: '45m ago', text: 'Marked on the offline satellite map as Real Aid Point.' }
     ],
@@ -203,30 +238,100 @@ const INITIAL_YOUTUBE_FEEDS: YouTubeFeedItem[] = [
 interface SocialAndReelsViewProps {
   currentHandle: string;
   isOnline: boolean;
+  isSuperAdmin?: boolean;
+  groups?: MeshGroupSim[];
+  externalSharedPost?: { content: string; mediaType?: 'VIDEO' | 'IMAGE'; mediaTitle?: string } | null;
   onLogEvent: (module: string, message: string, level?: 'info' | 'warn' | 'error' | 'success') => void;
   onDownloadFile: (fileName: string, sizeBytes: number) => void;
   onShareToChat?: (text: string, mediaType?: 'VIDEO' | 'IMAGE', mediaTitle?: string) => void;
   onShareToNotice?: (title: string, content: string, category: string) => void;
+  onShareToGroup?: (groupId: string, text: string, mediaType?: 'VIDEO' | 'IMAGE', mediaTitle?: string) => void;
 }
 
 export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
   currentHandle,
   isOnline,
+  isSuperAdmin = false,
+  groups = [],
+  externalSharedPost,
   onLogEvent,
   onDownloadFile,
   onShareToChat,
-  onShareToNotice
+  onShareToNotice,
+  onShareToGroup
 }) => {
   const [subTab, setSubTab] = useState<'wall' | 'reels' | 'youtube'>('wall');
 
-  // Social Wall State
+  // Social Wall State with My Posts Filter (Space saving)
   const [posts, setPosts] = useState<SocialPost[]>(INITIAL_SOCIAL_POSTS);
+  const [postFilter, setPostFilter] = useState<'ALL' | 'MY_POSTS'>('ALL');
   const [newPostText, setNewPostText] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [postAttachmentType, setPostAttachmentType] = useState<'NONE' | 'IMAGE' | 'VIDEO'>('NONE');
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Sync external post shared to social
+  useEffect(() => {
+    if (externalSharedPost) {
+      const newPost: SocialPost = {
+        id: `post-ext-${Date.now()}`,
+        authorHandle: currentHandle,
+        authorDisplayName: `Qaidi Node ${currentHandle.replace('qaidi', '')}`,
+        createdAtText: 'Just now • Shared',
+        content: externalSharedPost.content,
+        mediaType: externalSharedPost.mediaType,
+        mediaTitle: externalSharedPost.mediaTitle,
+        mediaSizeBytes: externalSharedPost.mediaType ? 4.5 * 1024 * 1024 : 0,
+        likesCount: 0,
+        commentsCount: 0,
+        allowSharing: true,
+        watermarkBadge: {
+          platform: 'Mesh Shared Verified',
+          timestamp: getRegionalTimeString(new Date(), 'Pakistan'),
+          hash: Math.random().toString(16).slice(2, 10).toUpperCase()
+        }
+      };
+      setPosts(prev => [newPost, ...prev]);
+      setSubTab('wall');
+    }
+  }, [externalSharedPost, currentHandle]);
+
+  // Share YouTube/Guide directly to Social Wall
+  const handleShareVideoToSocial = (title: string, videoUrl: string, channelName: string, category: string, sizeMb: number) => {
+    const newPost: SocialPost = {
+      id: `post-yt-${Date.now()}`,
+      authorHandle: currentHandle,
+      authorDisplayName: `Qaidi Node ${currentHandle.replace('qaidi', '')}`,
+      createdAtText: 'Just now • Video Guide',
+      content: `🎥 Shared Video Guide: "${title}"\nBy: ${channelName} • Category: ${category}\nLink: ${videoUrl}`,
+      mediaType: 'VIDEO',
+      mediaTitle: `${title}.mp4`,
+      mediaSizeBytes: sizeMb * 1024 * 1024,
+      likesCount: 0,
+      commentsCount: 0,
+      allowSharing: true,
+      watermarkBadge: {
+        platform: 'YouTube Mesh Verified',
+        timestamp: getRegionalTimeString(new Date(), 'Pakistan'),
+        hash: Math.random().toString(16).slice(2, 10).toUpperCase()
+      }
+    };
+    setPosts(prev => [newPost, ...prev]);
+    setSubTab('wall');
+    onLogEvent('SocialWall', `Shared video "${title}" to Social Feed!`, 'success');
+  };
+
+  // Storage File Picker ref
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Author Share Permissions & Group Origin State
+  const [allowSharingOnNewPost, setAllowSharingOnNewPost] = useState<boolean>(true);
+  const [shareFromGroupSelected, setShareFromGroupSelected] = useState<string>('');
+  const [activeShareModalPost, setActiveShareModalPost] = useState<SocialPost | null>(null);
+  const [selectedTargetGroupId, setSelectedTargetGroupId] = useState<string>('');
+  const [authorLockNotice, setAuthorLockNotice] = useState<string | null>(null);
 
   // Moderation Block Notification Banner
   const [moderationNotice, setModerationNotice] = useState<string | null>(null);
@@ -264,7 +369,34 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pasteUrlInput, setPasteUrlInput] = useState('');
 
-  // Handle User File Upload Selection
+  // Handle User File Upload Selection from Storage
+  const handleFileFromStorage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith('video') || file.name.match(/\.(mp4|mov|avi|mkv|webm)$/i);
+    const type: 'VIDEO' | 'IMAGE' = isVideo ? 'VIDEO' : 'IMAGE';
+    setPostAttachmentType(type);
+    setUploadedFileName(file.name);
+    setIsUploadingMedia(true);
+    setUploadProgress(25);
+
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    onLogEvent('DeviceStorage', `Picked file "${file.name}" (${sizeMb} MB) from device storage.`, 'info');
+
+    let p = 25;
+    const interval = setInterval(() => {
+      p += 35;
+      setUploadProgress(Math.min(100, p));
+      if (p >= 100) {
+        clearInterval(interval);
+        setIsUploadingMedia(false);
+        onLogEvent('DeviceStorage', `File "${file.name}" indexed for zero-duplication mesh distribution.`, 'success');
+      }
+    }, 180);
+  };
+
+  // Mock preset selector for demo convenience
   const handleSelectUpload = (type: 'VIDEO' | 'IMAGE') => {
     setPostAttachmentType(type);
     setIsUploadingMedia(true);
@@ -284,6 +416,23 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
         onLogEvent('MediaUpload', `File "${mockName}" ready for mesh distribution.`, 'success');
       }
     }, 200);
+  };
+
+  // Author-only Share Permission Toggle Handler
+  const handleToggleAuthorSharePermission = (postId: string) => {
+    setPosts(prev =>
+      prev.map(p => {
+        if (p.id !== postId) return p;
+        if (p.authorHandle !== currentHandle) {
+          setAuthorLockNotice(`Access Restricted: Only the original author (@${p.authorHandle}) has the right to enable or disable sharing.`);
+          setTimeout(() => setAuthorLockNotice(null), 3500);
+          return p;
+        }
+        const nextState = p.allowSharing === false ? true : false;
+        onLogEvent('AuthorOPSEC', `Author @${currentHandle} ${nextState ? 'ENABLED' : 'DISABLED'} sharing permissions on post ${postId}.`, nextState ? 'success' : 'warn');
+        return { ...p, allowSharing: nextState };
+      })
+    );
   };
 
   // Create Post with Islamic Law Auto-Filter
@@ -323,7 +472,7 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
 
     const badge = postAttachmentType !== 'NONE' ? {
       platform: 'Qaidi Share Verified',
-      timestamp: new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC',
+      timestamp: getRegionalTimeString(new Date(), 'Pakistan'),
       hash: Math.random().toString(16).slice(2, 10).toUpperCase()
     } : undefined;
 
@@ -341,6 +490,8 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
       mediaSizeBytes: size,
       likesCount: 0,
       commentsCount: 0,
+      allowSharing: allowSharingOnNewPost,
+      sharedFromGroup: shareFromGroupSelected || undefined,
       watermarkBadge: badge
     };
 
@@ -348,6 +499,8 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
     setNewPostText('');
     setPostAttachmentType('NONE');
     setUploadedFileName('');
+    setShareFromGroupSelected('');
+    setAllowSharingOnNewPost(true);
     setShowCreateModal(false);
     onLogEvent('SocialWall', `New post published by ${currentHandle} to mesh social feed.`, 'success');
   };
@@ -495,53 +648,104 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
         </div>
       )}
 
+      {/* Author Sharing Security Notice Banner */}
+      {authorLockNotice && (
+        <div className="p-3 bg-amber-950/90 border-b border-amber-500/70 text-xs text-amber-200 flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-amber-400 shrink-0" />
+            <span className="font-semibold">{authorLockNotice}</span>
+          </div>
+          <button onClick={() => setAuthorLockNotice(null)} className="text-amber-400 hover:text-white p-1">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* VIEW 1: SOCIAL FEED */}
       {subTab === 'wall' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Post Composer Prompt with Clear File & Video Upload Options */}
-          <div className="p-3 rounded-lg bg-[#032219] border border-emerald-800/60 space-y-2.5">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-emerald-700/40 border border-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-300">
+          {/* Compact Space-Saving Composer Bar: Write Post + My Posts Filter */}
+          <div className="p-2 rounded-lg bg-[#032219] border border-emerald-800/60 flex items-center justify-between gap-2 text-xs shadow-sm">
+            {/* Write a Post Button */}
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <div className="h-6 w-6 rounded-full bg-emerald-700/40 border border-emerald-500/50 flex items-center justify-center text-[10px] font-bold text-emerald-300 shrink-0 font-mono">
                 {currentHandle.slice(0, 2).toUpperCase()}
               </div>
               <button
+                type="button"
                 onClick={() => setShowCreateModal(true)}
-                className="flex-1 text-left px-3 py-1.5 rounded bg-[#021812] border border-emerald-900/80 text-xs text-emerald-400/80 hover:text-white hover:border-emerald-700 transition-colors"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#04281e] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
               >
-                Share updates, videos, or survival notes...
+                <Plus className="h-3 w-3 text-emerald-400 shrink-0" />
+                <span className="truncate">Write a Post...</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateModal(true);
+                  setTimeout(() => fileInputRef.current?.click(), 100);
+                }}
+                className="py-1.5 px-2 rounded-lg bg-[#04281e] hover:bg-[#063f2f] text-emerald-300 border border-emerald-500/40 text-[10.5px] font-semibold flex items-center gap-1 transition-all shadow-sm shrink-0"
+                title="Pick and share media file directly from phone storage"
+              >
+                <Folder className="h-3 w-3 text-emerald-400" />
+                <span>Pick File</span>
               </button>
             </div>
 
-            {/* Clear, Prominent Media Upload Buttons */}
-            <div className="flex items-center justify-between pt-1 border-t border-emerald-900/60 text-xs">
-              <span className="text-[10px] text-emerald-400/80 font-mono">Quick Upload Media:</span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => {
-                    setShowCreateModal(true);
-                    handleSelectUpload('VIDEO');
-                  }}
-                  className="px-2.5 py-1 rounded bg-[#042d21] hover:bg-emerald-800/40 text-emerald-300 border border-emerald-700/50 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Video className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Upload Video</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCreateModal(true);
-                    handleSelectUpload('IMAGE');
-                  }}
-                  className="px-2.5 py-1 rounded bg-[#042d21] hover:bg-emerald-800/40 text-emerald-300 border border-emerald-700/50 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <ImageIcon className="h-3.5 w-3.5 text-teal-400" />
-                  <span>Upload Photo</span>
-                </button>
-              </div>
+            {/* My Posts & All Feed Toggle: Space-Saving Zero-Waste Navigation */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPostFilter('ALL')}
+                className={`px-2 py-1 rounded text-[10.5px] font-semibold transition-all ${
+                  postFilter === 'ALL'
+                    ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
+                    : 'bg-[#042d21] text-emerald-300 hover:text-white border border-emerald-800/80'
+                }`}
+              >
+                All Feed
+              </button>
+              <button
+                type="button"
+                onClick={() => setPostFilter('MY_POSTS')}
+                className={`px-2 py-1 rounded text-[10.5px] font-semibold flex items-center gap-1 transition-all ${
+                  postFilter === 'MY_POSTS'
+                    ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
+                    : 'bg-[#042d21] text-emerald-300 hover:text-white border border-emerald-800/80'
+                }`}
+                title="View only posts created by you"
+              >
+                <UserCheck className="h-3 w-3" />
+                <span>My Posts</span>
+                {posts.filter(p => p.authorHandle === currentHandle).length > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full bg-emerald-950 text-emerald-300 text-[8.5px] font-mono">
+                    {posts.filter(p => p.authorHandle === currentHandle).length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
+          {/* Empty My Posts Notice */}
+          {postFilter === 'MY_POSTS' && posts.filter(p => p.authorHandle === currentHandle).length === 0 && (
+            <div className="p-6 rounded-lg bg-[#032219] border border-emerald-800/40 text-center space-y-2">
+              <p className="text-xs text-emerald-300">You haven't published any posts yet.</p>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs shadow"
+              >
+                Write Your First Post
+              </button>
+            </div>
+          )}
+
           {/* Posts List */}
-          {posts.map((post) => (
+          {posts
+            .filter(p => postFilter === 'ALL' || p.authorHandle === currentHandle)
+            .map((post) => (
             <div
               key={post.id}
               className={`p-3 rounded-lg border transition-all ${
@@ -550,7 +754,7 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                   : 'bg-[#032219] border-emerald-800/60 hover:border-emerald-700'
               }`}
             >
-              {/* Post Header: Note ZERO special badges or crowns shown publicly! */}
+              {/* Post Header: ZERO special badges/crowns; displays group tag & author share permission */}
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${
@@ -566,11 +770,67 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                   </div>
                 </div>
 
-                {post.isSponsoredAd && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    Sponsored Ad
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {/* Origin Group Badge */}
+                  {post.sharedFromGroup && (
+                    <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-600/40 flex items-center gap-1">
+                      <Users className="h-3 w-3 text-emerald-400" />
+                      <span>#{post.sharedFromGroup}</span>
+                    </span>
+                  )}
+
+                  {/* Author-only Share Permission Controls */}
+                  {post.authorHandle === currentHandle ? (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAuthorSharePermission(post.id)}
+                      className={`text-[9.5px] font-mono px-2 py-0.5 rounded border flex items-center gap-1 transition-colors ${
+                        post.allowSharing !== false
+                          ? 'bg-emerald-900/60 border-emerald-500/60 text-emerald-300 hover:bg-emerald-800/80'
+                          : 'bg-rose-950/70 border-rose-500/60 text-rose-300 hover:bg-rose-900/80'
+                      }`}
+                      title="Only the author has the right to toggle sharing for this post"
+                    >
+                      {post.allowSharing !== false ? (
+                        <>
+                          <Unlock className="h-2.5 w-2.5" />
+                          <span>Author: Sharing ON</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-2.5 w-2.5" />
+                          <span>Author: Sharing OFF</span>
+                        </>
+                      )}
+                    </button>
+                  ) : post.allowSharing === false ? (
+                    <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700/80 text-slate-400 flex items-center gap-1">
+                      <Lock className="h-2.5 w-2.5 text-rose-400/80" />
+                      <span>Author Locked</span>
+                    </span>
+                  ) : null}
+
+                  {post.isSponsoredAd && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Sponsored Ad
+                    </span>
+                  )}
+
+                  {isSuperAdmin && !post.isSponsoredAd && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPosts(prev => prev.filter(p => p.id !== post.id));
+                        onLogEvent('SuperAdmin', `Super Admin (@qaidi156156) purged post "${post.id}" network-wide.`, 'warn');
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 font-bold text-[9px] flex items-center gap-1 shadow-sm transition-all"
+                      title="Super Admin Force Delete Everywhere"
+                    >
+                      <Trash2 className="h-2.5 w-2.5 text-rose-400" />
+                      <span>Delete (Admin)</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Post Body Content */}
@@ -639,14 +899,34 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                   <span>{post.commentsCount} comments</span>
                 </button>
 
-                {/* Radio Relay Button */}
-                <button
-                  onClick={() => onLogEvent('SocialWall', `Relayed post ${post.id} over BitChat radio mesh`, 'info')}
-                  className="flex items-center gap-1.5 hover:text-emerald-200 transition-colors"
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                  <span>Radio Relay</span>
-                </button>
+                {/* Author Share Permission Aware Button */}
+                {post.allowSharing === false && post.authorHandle !== currentHandle ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthorLockNotice(`Sharing Disabled: Original author @${post.authorHandle} has locked sharing permissions for this post.`);
+                      setTimeout(() => setAuthorLockNotice(null), 3500);
+                    }}
+                    className="flex items-center gap-1.5 text-slate-500 hover:text-slate-400 transition-colors"
+                    title="Original author has disabled sharing"
+                  >
+                    <Lock className="h-3.5 w-3.5 text-rose-400/80" />
+                    <span className="text-[11px]">Share Locked</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveShareModalPost(post);
+                      setSelectedTargetGroupId(groups[0]?.id || '');
+                    }}
+                    className="flex items-center gap-1.5 hover:text-emerald-200 text-emerald-400 transition-colors"
+                    title="Share post to a mesh group or chat"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    <span>Share / Group</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -1085,15 +1365,13 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                         </button>
 
                         <button
-                          onClick={() => {
-                            onShareToNotice?.(vid.title, `Field Video Guide by ${vid.channelName}: ${vid.videoUrl}. Verified for off-grid operations.`, vid.category);
-                            onLogEvent('NoticeBoard', `Posted video "${vid.title}" to Notice Board!`, 'success');
-                          }}
-                          className="py-1.5 px-1.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1"
-                          title="Share to community Notice Board"
+                          type="button"
+                          onClick={() => handleShareVideoToSocial(vid.title, vid.videoUrl, vid.channelName, vid.category, vid.sizeMb)}
+                          className="py-1.5 px-1.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1 transition-colors"
+                          title="Share video to Social Feed"
                         >
-                          <Bell className="h-3 w-3 text-emerald-400" />
-                          <span>Notice</span>
+                          <Share2 className="h-3 w-3 text-emerald-400" />
+                          <span>To Social</span>
                         </button>
                       </div>
 
@@ -1184,14 +1462,20 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
 
               <button
                 onClick={() => {
-                  onShareToNotice?.(activeWatchingVideo.title, `Field Video Guide: ${activeWatchingVideo.videoUrl}`, activeWatchingVideo.category);
+                  handleShareVideoToSocial(
+                    activeWatchingVideo.title,
+                    activeWatchingVideo.videoUrl,
+                    activeWatchingVideo.channelName,
+                    activeWatchingVideo.category,
+                    activeWatchingVideo.sizeMb
+                  );
                   setActiveWatchingVideo(null);
-                  onLogEvent('NoticeBoard', `Posted "${activeWatchingVideo.title}" to Notice Board!`, 'success');
+                  onLogEvent('SocialShare', `Shared "${activeWatchingVideo.title}" to Social Feed!`, 'success');
                 }}
                 className="py-2 px-3 rounded-lg bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40 font-bold flex items-center justify-center gap-1.5"
               >
-                <Bell className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Share to Notice</span>
+                <Share2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Share to Social</span>
               </button>
             </div>
           </div>
@@ -1237,27 +1521,95 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                 </div>
               )}
 
-              {/* Media Upload Buttons */}
-              <div className="space-y-1">
-                <label className="text-[10px] text-emerald-400 block font-semibold">Select Upload Option:</label>
-                <div className="grid grid-cols-2 gap-2">
+              {/* Hidden Native File Input for Real Device Storage Access */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileFromStorage}
+                accept="video/*,image/*,audio/*"
+                className="hidden"
+              />
+
+              {/* Real Device Storage File Picker Button */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-emerald-400 block font-semibold">Media Attachment:</label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-2.5 rounded-lg border border-emerald-500/60 bg-[#043324] hover:bg-emerald-800/50 text-xs font-semibold text-emerald-100 flex items-center justify-center gap-2 shadow-inner transition-colors"
+                >
+                  <Folder className="h-4 w-4 text-emerald-300" />
+                  <span>Pick File from Phone Storage (Video / Photo)</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2 pt-0.5">
                   <button
                     type="button"
                     onClick={() => handleSelectUpload('VIDEO')}
-                    className="p-2 rounded border border-emerald-700/60 bg-[#042d21] hover:bg-emerald-800/40 text-xs font-semibold text-emerald-200 flex items-center justify-center gap-1.5"
+                    className="p-1.5 rounded border border-emerald-800/80 bg-[#032219] hover:bg-[#042d21] text-[11px] text-emerald-300 flex items-center justify-center gap-1.5 transition-colors"
                   >
-                    <Video className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Upload Video</span>
+                    <Video className="h-3 w-3 text-emerald-400" />
+                    <span>Quick Video Clip</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSelectUpload('IMAGE')}
-                    className="p-2 rounded border border-emerald-700/60 bg-[#042d21] hover:bg-emerald-800/40 text-xs font-semibold text-emerald-200 flex items-center justify-center gap-1.5"
+                    className="p-1.5 rounded border border-emerald-800/80 bg-[#032219] hover:bg-[#042d21] text-[11px] text-emerald-300 flex items-center justify-center gap-1.5 transition-colors"
                   >
-                    <ImageIcon className="h-3.5 w-3.5 text-teal-400" />
-                    <span>Upload Photo</span>
+                    <ImageIcon className="h-3 w-3 text-teal-400" />
+                    <span>Quick Photo</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Group Origin Tag Selector (Share From Group) */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-emerald-400 block font-semibold flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  <span>Share From Group Origin (Optional Tag):</span>
+                </label>
+                <select
+                  value={shareFromGroupSelected}
+                  onChange={(e) => setShareFromGroupSelected(e.target.value)}
+                  className="w-full rounded-lg bg-[#021812] border border-emerald-900/80 p-2 text-xs text-emerald-200 focus:outline-none focus:border-emerald-500 font-mono"
+                >
+                  <option value="">No Group Tag (Public Swarm Feed)</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.name}>
+                      {g.name} ({g.members?.length || 0} peers)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Author Share Permission Control (Only Author Has Right) */}
+              <div className="p-2.5 rounded-lg bg-[#021812] border border-emerald-800/60 flex items-center justify-between">
+                <div className="space-y-0.5 max-w-[210px]">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    {allowSharingOnNewPost ? (
+                      <Unlock className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 text-rose-400" />
+                    )}
+                    <span>Author Sharing Rights</span>
+                  </span>
+                  <p className="text-[9.5px] text-emerald-400/80 leading-tight">
+                    {allowSharingOnNewPost
+                      ? 'Peers can share this post to their groups & chats'
+                      : 'Locked: Only you (the author) have the right to share or enable sharing'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAllowSharingOnNewPost(!allowSharingOnNewPost)}
+                  className={`px-2.5 py-1 rounded text-[10.5px] font-bold border transition-colors ${
+                    allowSharingOnNewPost
+                      ? 'bg-emerald-600 text-slate-950 border-emerald-400 shadow'
+                      : 'bg-rose-950/80 text-rose-300 border-rose-500/60'
+                  }`}
+                >
+                  {allowSharingOnNewPost ? 'ALLOWED' : 'LOCKED'}
+                </button>
               </div>
 
               <div className="flex gap-2 pt-1">
@@ -1371,6 +1723,87 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                 Send
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED SHARE POST MODAL (Groups, Chat, Radio Relay) */}
+      {activeShareModalPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in select-none">
+          <div className="w-full max-w-sm rounded-2xl border border-emerald-500/50 bg-[#032219] p-4 shadow-2xl space-y-3.5">
+            <div className="flex items-center justify-between border-b border-emerald-900/80 pb-2">
+              <div className="flex items-center gap-2">
+                <Share2 className="h-4 w-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Share Post Across Mesh</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveShareModalPost(null)}
+                className="text-emerald-400 hover:text-white p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Post Snippet Preview */}
+            <div className="p-2.5 rounded-lg bg-[#021812] border border-emerald-900/70 text-xs space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-emerald-400 font-mono">
+                <span>Author: @{activeShareModalPost.authorHandle}</span>
+                {activeShareModalPost.sharedFromGroup && <span>From: #{activeShareModalPost.sharedFromGroup}</span>}
+              </div>
+              <p className="text-emerald-100 line-clamp-2 italic">"{activeShareModalPost.content}"</p>
+              {activeShareModalPost.mediaTitle && (
+                <span className="text-[10px] text-teal-300 font-mono block">📎 {activeShareModalPost.mediaTitle}</span>
+              )}
+            </div>
+
+            {/* Option A: Share to Mesh Group */}
+            <div className="space-y-1.5 p-2.5 rounded-xl bg-[#021812] border border-emerald-800/60">
+              <label className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Share into Group:</span>
+              </label>
+              {groups.length > 0 ? (
+                <div className="space-y-2">
+                  <select
+                    value={selectedTargetGroupId || groups[0]?.id || ''}
+                    onChange={(e) => setSelectedTargetGroupId(e.target.value)}
+                    className="w-full rounded-lg bg-[#032219] border border-emerald-700/60 p-2 text-xs text-white focus:outline-none focus:border-emerald-400 font-mono"
+                  >
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.members?.length || 0} members)
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = selectedTargetGroupId || groups[0]?.id;
+                      if (!targetId) return;
+                      const targetName = groups.find(g => g.id === targetId)?.name || 'Group';
+                      onShareToGroup?.(
+                        targetId,
+                        `📢 Shared post by @${activeShareModalPost.authorHandle}: "${activeShareModalPost.content}"`,
+                        activeShareModalPost.mediaType,
+                        activeShareModalPost.mediaTitle
+                      );
+                      onLogEvent('GroupShare', `Shared post ${activeShareModalPost.id} into group "${targetName}".`, 'success');
+                      setActiveShareModalPost(null);
+                    }}
+                    className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>Send to Selected Group</span>
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 py-1">
+                  No mesh groups joined yet. Create or join a group first!
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -259,6 +259,6 @@ if __name__ == "__main__":
     sdr.setFrequency(SOAPY_SDR_TX, 0, FREQ_HZ)
     sdr.setGain(SOAPY_SDR_TX, 0, TX_GAIN_DB)
 
-    pkt = build_emergency_packet("qaidi1561561", "GLOBAL EMERGENCY PING: Mesh online and clear.")
+    pkt = build_emergency_packet("qaidi156156", "GLOBAL EMERGENCY PING: Mesh online and clear.")
     transmit_frame(sdr, pkt)
 `;

@@ -47,12 +47,12 @@ export function generateRandom5DigitSuffix(seed?: string): string {
  * 1. Exactly 10 characters total.
  * 2. Alphabets and numbers only (no spaces, no special characters).
  * 3. 5-character alphanumeric prefix + 5-digit permanent locked numeric suffix.
- * 4. Master Super Admin handle 'qaidi1561561' is reserved.
+ * 4. Master Super Admin handle 'qaidi156156' is reserved.
  */
 export function isValidHandle(handle: string): boolean {
   if (!handle) return false;
   const clean = handle.trim().toLowerCase().replace(/^@/, '');
-  if (clean === 'qaidi1561561') return true;
+  if (clean === 'qaidi156156' || clean === 'qaidi1561561') return true;
   // Must be strictly 10 characters: 5 alphanumeric prefix + 5 digits
   return /^[a-z0-9]{5}\d{5}$/.test(clean);
 }
@@ -60,7 +60,7 @@ export function isValidHandle(handle: string): boolean {
 export function isValidQaidiHandle(handle: string): boolean {
   if (!handle) return false;
   const clean = handle.trim().toLowerCase().replace(/^@/, '');
-  if (clean === 'qaidi1561561') return true;
+  if (clean === 'qaidi156156' || clean === 'qaidi1561561') return true;
   // Strictly 10 characters: 5 alphanumeric characters + 5 digits
   if (/^[a-z0-9]{5}\d{5}$/.test(clean)) return true;
   // Legacy backward compatibility for tests with qaidi followed by 3 to 6 digits
@@ -137,11 +137,11 @@ export function checkHandleUniqueness(
 ): UniquenessCheckResult {
   const clean = handle.trim().toLowerCase().replace(/^@/, '');
 
-  if (clean === 'qaidi1561561') {
+  if (clean === 'qaidi156156' || clean === 'qaidi1561561') {
     return {
       isUnique: false,
       collisionSource: 'RESERVED_MASTER_ADMIN',
-      message: 'This handle is reserved exclusively for the Master Super Admin.'
+      message: 'This handle is strictly reserved for the Master Super Admin (@qaidi156156). Other users cannot claim this name.'
     };
   }
 
@@ -177,6 +177,7 @@ export function checkHandleUniqueness(
  */
 export function generateRandomQaidiHandle(existingHandles: string[] = []): string {
   const existingSet = new Set(existingHandles.map(h => h.toLowerCase().replace(/^@/, '')));
+  existingSet.add('qaidi156156');
   existingSet.add('qaidi1561561');
 
   for (let attempt = 0; attempt < 2000; attempt++) {
@@ -317,12 +318,12 @@ export function registerOrAuthenticateAccount(
 
 /**
  * Strict Super Admin authorization check:
- * Only 'qaidi1561561' can unlock master governance and delegation.
+ * Only 'qaidi156156' can unlock master governance and delegation.
  */
 export function isSuperAdminAuthenticated(handle: string): boolean {
   if (!handle) return false;
   const clean = handle.trim().toLowerCase().replace(/^@/, '');
-  return clean === 'qaidi1561561';
+  return clean === 'qaidi156156' || clean === 'qaidi1561561';
 }
 
 /**

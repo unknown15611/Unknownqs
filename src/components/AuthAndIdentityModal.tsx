@@ -56,15 +56,15 @@ export const AuthAndIdentityModal: React.FC<AuthAndIdentityModalProps> = ({
 
   // Simulated known network registry
   const [registry, setRegistry] = useState<Record<string, UserAccountProfile>>({
-    qaidi1561561: {
-      handle: 'qaidi1561561',
+    qaidi156156: {
+      handle: 'qaidi156156',
       hardwareMac: '02:00:00:FF:AA:01',
       passwordHashHex: 'MASTER_ADMIN_SUPER_KEY_HASH',
-      recoveryKeyHex: 'rk_qaidi1561561_master_seed',
+      recoveryKeyHex: 'rk_qaidi156156_master_seed',
       registeredAt: 1730000000000,
       lastLoginAt: Date.now(),
       displayName: 'Master Super Admin',
-      avatarSeed: 'qaidi1561561'
+      avatarSeed: 'qaidi156156'
     },
     qaidi77110: {
       handle: 'qaidi77110',
@@ -143,6 +143,14 @@ export const AuthAndIdentityModal: React.FC<AuthAndIdentityModalProps> = ({
       return;
     }
 
+    // Strictly reserve Super Admin handle: other users cannot claim this name!
+    const cleanProposed = proposedFullHandle.trim().toLowerCase().replace(/^@/, '');
+    if (cleanProposed === 'qaidi156156' || cleanProposed === 'qaidi1561561') {
+      setErrorMessage('Access Denied: Handle @qaidi156156 is strictly reserved for the Sovereign Master Super Admin. Other users cannot claim this name.');
+      onLogEvent('IdentityManager', 'Blocked unauthorized attempt to claim reserved Master Super Admin handle @qaidi156156.', 'error');
+      return;
+    }
+
     // Duplicate check
     if (!uniquenessResult.isUnique && proposedFullHandle !== currentHandle) {
       setErrorMessage(uniquenessResult.message);
@@ -189,9 +197,9 @@ export const AuthAndIdentityModal: React.FC<AuthAndIdentityModalProps> = ({
 
   // Quick switch for Super Admin debugging
   const handleSwitchToSuperAdminQuick = () => {
-    onUpdateHandle('qaidi1561561');
-    setSuccessMessage('Logged in as Master Super Admin (qaidi1561561).');
-    onLogEvent('IdentityManager', 'Switched to Master Super Admin qaidi1561561.', 'info');
+    onUpdateHandle('qaidi156156');
+    setSuccessMessage('Logged in as Master Super Admin (qaidi156156).');
+    onLogEvent('IdentityManager', 'Switched to Master Super Admin qaidi156156.', 'info');
     setTimeout(() => {
       onClose();
     }, 600);
@@ -234,20 +242,6 @@ export const AuthAndIdentityModal: React.FC<AuthAndIdentityModalProps> = ({
           </p>
         </div>
 
-        {/* How Duplicate Detection Works (User's Question Addressed Transparently) */}
-        <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/30 text-[10px] text-emerald-300 mb-3 space-y-1">
-          <span className="font-bold text-emerald-200 flex items-center gap-1">
-            <Radio className="h-3 w-3 text-emerald-400" />
-            <span>How We Know If Name Is Duplicate:</span>
-          </span>
-          <p className="text-[10px] text-emerald-200/80 leading-snug">
-            1. <strong>Active Mesh Peer Beacons:</strong> Real-time scan of nearby BLE, Wi-Fi Direct, Wi-Fi Aware & LoRa nodes.
-            <br />
-            2. <strong>Local & GitHub Sync Registry:</strong> Checks offline SQLite DB & synced public handles.
-            <br />
-            3. <strong>Hardware Salt Suffix:</strong> The 5-digit number is mathematically unique to this device seed.
-          </p>
-        </div>
 
         <form onSubmit={handleSaveAndAuthenticate} className="space-y-3">
           {/* Two-Part Handle Field: Editable 5-char Prefix + Locked 5-digit Suffix */}

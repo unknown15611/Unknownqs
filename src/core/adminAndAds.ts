@@ -10,8 +10,8 @@
 export const ADMOB_APP_ID = "ca-app-pub-3283420350176268~4797966805";
 export const ADMOB_NATIVE_VIDEO_FEED_UNIT_ID = "ca-app-pub-3283420350176268/4797966805";
 
-// Exclusive Global Super Admin Handle
-export const GLOBAL_SUPER_ADMIN_HANDLE = "qaidi1561561";
+// Exclusive Global Super Admin Handle (strictly reserved, no one else can claim this name)
+export const GLOBAL_SUPER_ADMIN_HANDLE = "qaidi156156";
 
 // Master Developer Ed25519 Public Key (Hardcoded into trusted app binary)
 export const OFFICIAL_DEVELOPER_PUBLIC_KEY = "04a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcde";
@@ -29,18 +29,18 @@ export interface AdminAnnouncement {
 }
 
 /**
- * Checks whether the current user is the exclusive Global Super Admin (qaidi1561561).
- * Only qaidi1561561 has access to master developer tools and governance.
+ * Checks whether the current user is the exclusive Global Super Admin (qaidi156156).
+ * Only qaidi156156 has access to master developer tools and governance.
  */
 export function isGlobalSuperAdmin(handle: string): boolean {
   if (!handle) return false;
   const normalized = handle.trim().toLowerCase().replace(/^@/, '');
-  return normalized === 'qaidi1561561';
+  return normalized === 'qaidi156156';
 }
 
 /**
  * Super Admin delegation authority:
- * Only qaidi1561561 can promote other users to Admin or Super Admin.
+ * Only qaidi156156 can promote other users to Admin or Super Admin.
  */
 export function canPromoteToSuperAdmin(actorHandle: string): boolean {
   return isGlobalSuperAdmin(actorHandle);

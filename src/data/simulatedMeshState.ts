@@ -65,6 +65,7 @@ export interface MeshGroupSim {
   admins: string[]; // List of handles that are Group Admins (like WhatsApp)
   members: string[]; // All handles
   onlyAdminsCanPost: boolean;
+  isVoiceChatEnabled?: boolean;
   avatarColor: string;
   qrInviteCode?: string;
   isQrJoinEnabled?: boolean;
@@ -256,7 +257,7 @@ export const INITIAL_DTN_PACKETS: DtnPacketSim[] = [
   },
   {
     id: 'pkt-dtn-804',
-    source: 'qaidi1561561',
+    source: 'qaidi156156',
     destination: 'group-mesh-ops',
     preview: 'Tutorial Video Attached: How to wire USB OTG LoRa module (CH340/CP2102) for 15km extreme range.',
     createdAt: Date.now() - 110000,

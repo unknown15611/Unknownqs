@@ -136,7 +136,7 @@ export const SuperAdminConsoleModal: React.FC<SuperAdminConsoleModalProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed">
-            These master governance tools are exclusively restricted to origin master <span className="font-mono text-emerald-400 font-bold">@qaidi1561561</span>. Your current identity (<span className="font-mono text-rose-300">{currentHandle}</span>) lacks cryptographic super admin clearance.
+            These master governance tools are exclusively restricted to origin master <span className="font-mono text-emerald-400 font-bold">@qaidi156156</span>. Your current identity (<span className="font-mono text-rose-300">{currentHandle}</span>) lacks cryptographic super admin clearance.
           </p>
           <div className="pt-2 border-t border-slate-800 flex gap-2">
             <button
@@ -200,7 +200,7 @@ export const SuperAdminConsoleModal: React.FC<SuperAdminConsoleModalProps> = ({
 
   // Handle Revoke Delegated Admin
   const handleRevokeDelegation = (handle: string) => {
-    if (handle === 'qaidi1561561') {
+    if (handle === 'qaidi156156') {
       onLogEvent('SuperAdmin', 'Cannot revoke Origin Master Super Admin account!', 'error');
       return;
     }
@@ -388,7 +388,7 @@ export const SuperAdminConsoleModal: React.FC<SuperAdminConsoleModalProps> = ({
                       type="button"
                       onClick={() => {
                         setBroadcastSeverity('WARNING');
-                        setBroadcastMsg('⚠️ SEVERE WEATHER WARNING: 3.8 hPa drop detected. Evacuate low terrain; join group #lahore-relief.');
+                        setBroadcastMsg('⚠️ SEVERE RAIN WARNING: ~40 mm heavy rain expected in next 2 hours. Evacuate low terrain; join group #lahore-relief.');
                       }}
                       className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-[9.5px] text-slate-300 truncate"
                     >
@@ -539,7 +539,7 @@ export const SuperAdminConsoleModal: React.FC<SuperAdminConsoleModalProps> = ({
                         <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9px]">
                           {adm.role}
                         </span>
-                        {adm.handle !== 'qaidi1561561' && (
+                        {adm.handle !== 'qaidi156156' && (
                           <button
                             type="button"
                             onClick={() => handleRevokeDelegation(adm.handle)}
@@ -832,7 +832,7 @@ export const SuperAdminConsoleModal: React.FC<SuperAdminConsoleModalProps> = ({
         {/* Footer */}
         <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs shrink-0">
           <span className="text-[10px] text-slate-500 font-mono">
-            Origin ID: qaidi1561561 • E2EE Master
+            Origin ID: qaidi156156 • E2EE Master
           </span>
           <button
             onClick={onClose}

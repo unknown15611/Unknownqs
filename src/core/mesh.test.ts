@@ -282,11 +282,11 @@ test('MeshConnectivityManager selects optimal transport and falls back to Room D
   assert.equal(lowBattery, 'BLE_MESH');
 });
 
-// NEW TESTS: Global Super Admin @Qaidi1561561 & 20-video download native ad cadence
-test('Global super admin is strictly locked to @Qaidi1561561', () => {
-  assert.equal(isGlobalSuperAdmin('@Qaidi1561561'), true);
-  assert.equal(isGlobalSuperAdmin('@qaidi1561561'), true); // Case-insensitive
-  assert.equal(isGlobalSuperAdmin('@Qaidi1561561 '), true); // Whitespace-trimmed
+// NEW TESTS: Global Super Admin @qaidi156156 & 20-video download native ad cadence
+test('Global super admin is strictly locked to @qaidi156156', () => {
+  assert.equal(isGlobalSuperAdmin('@Qaidi156156'), true);
+  assert.equal(isGlobalSuperAdmin('@qaidi156156'), true); // Case-insensitive
+  assert.equal(isGlobalSuperAdmin('@Qaidi156156 '), true); // Whitespace-trimmed
   assert.equal(isGlobalSuperAdmin('@Qaidi156'), false);
   assert.equal(isGlobalSuperAdmin('@random_user'), false);
   assert.equal(isGlobalSuperAdmin('@shaazan_786'), false);
