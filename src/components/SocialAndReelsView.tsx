@@ -130,18 +130,6 @@ const INITIAL_SOCIAL_POSTS: SocialPost[] = [
     ]
   },
   {
-    id: 'post-ad-1',
-    authorHandle: 'Google AdMob Native',
-    authorDisplayName: 'Sponsored (ca-app-pub-3283420350176268/4797966805)',
-    createdAtText: 'Sponsored',
-    content: 'Protect your family with emergency solar rechargeable lanterns. Designed for off-grid blackouts and long-lasting mesh hub operation.',
-    isSponsoredAd: true,
-    adUnitId: 'ca-app-pub-3283420350176268/4797966805',
-    likesCount: 5,
-    commentsCount: 0,
-    allowSharing: true
-  },
-  {
     id: 'post-2',
     authorHandle: 'qaidi4829',
     authorDisplayName: 'Qaidi Node 4829',
@@ -541,9 +529,52 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
     onLogEvent('SocialInteraction', `${!post?.isLiked ? 'Liked' : 'Unliked'} post ${postId}`, 'info');
   };
 
-  // Interactive Comments
+  // Interactive Comments: Inline Feed Visibility & Modal Support
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [newCommentInput, setNewCommentInput] = useState('');
+
+  // Inline comments toggle state: reveals comments directly in the feed without hiding behind a modal
+  const [expandedCommentsPostIds, setExpandedCommentsPostIds] = useState<Record<string, boolean>>({
+    'post-1': true // default expand first post so comments are immediately visible and not hidden!
+  });
+  const [inlineCommentInputs, setInlineCommentInputs] = useState<Record<string, string>>({});
+
+  const handleToggleInlineComments = (postId: string) => {
+    setExpandedCommentsPostIds(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  };
+
+  const handleAddInlineComment = (postId: string) => {
+    const text = (inlineCommentInputs[postId] || '').trim();
+    if (!text) return;
+    const filter = filterContentUnderIslamicLaw(text);
+    if (!filter.allowed) {
+      setModerationNotice(ISLAMIC_LAW_BLOCK_MESSAGE);
+      onLogEvent('IslamicLawModeration', `Blocked comment containing prohibited content.`, 'error');
+      return;
+    }
+    const newComment: PostComment = {
+      id: `c-${Date.now()}`,
+      authorHandle: currentHandle,
+      createdAtText: 'Just now',
+      text
+    };
+    setPosts(prev =>
+      prev.map(p => {
+        if (p.id !== postId) return p;
+        const updated = [...(p.comments || []), newComment];
+        return {
+          ...p,
+          comments: updated,
+          commentsCount: updated.length
+        };
+      })
+    );
+    setInlineCommentInputs(prev => ({ ...prev, [postId]: '' }));
+    onLogEvent('SocialComment', `New inline comment posted on ${postId} by ${currentHandle}.`, 'success');
+  };
 
   const handleAddComment = (postId: string) => {
     if (!newCommentInput.trim()) return;
@@ -663,34 +694,27 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
 
       {/* VIEW 1: SOCIAL FEED */}
       {subTab === 'wall' && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           {/* Compact Space-Saving Composer Bar: Write Post + My Posts Filter */}
           <div className="p-2 rounded-lg bg-[#032219] border border-emerald-800/60 flex items-center justify-between gap-2 text-xs shadow-sm">
-            {/* Write a Post Button */}
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <div className="h-6 w-6 rounded-full bg-emerald-700/40 border border-emerald-500/50 flex items-center justify-center text-[10px] font-bold text-emerald-300 shrink-0 font-mono">
+            {/* Write a Post Button (Consolidated with Media Pickers) */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="h-7 w-7 rounded-full bg-emerald-700/40 border border-emerald-500/50 flex items-center justify-center text-[10px] font-bold text-emerald-300 shrink-0 font-mono">
                 {currentHandle.slice(0, 2).toUpperCase()}
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(true)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#04281e] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                className="flex-1 py-1.5 px-3 rounded-lg bg-[#04281e] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40 text-xs font-semibold flex items-center justify-between transition-all shadow-sm group"
               >
-                <Plus className="h-3 w-3 text-emerald-400 shrink-0" />
-                <span className="truncate">Write a Post...</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateModal(true);
-                  setTimeout(() => fileInputRef.current?.click(), 100);
-                }}
-                className="py-1.5 px-2 rounded-lg bg-[#04281e] hover:bg-[#063f2f] text-emerald-300 border border-emerald-500/40 text-[10.5px] font-semibold flex items-center gap-1 transition-all shadow-sm shrink-0"
-                title="Pick and share media file directly from phone storage"
-              >
-                <Folder className="h-3 w-3 text-emerald-400" />
-                <span>Pick File</span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Plus className="h-3.5 w-3.5 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="truncate text-emerald-300">Write a post or share intel...</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-400/80 shrink-0 ml-1">
+                  <ImageIcon className="h-3.5 w-3.5 hover:text-emerald-300" />
+                  <Video className="h-3.5 w-3.5 hover:text-emerald-300" />
+                </div>
               </button>
             </div>
 
@@ -890,13 +914,22 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                   <span>{post.likesCount}</span>
                 </button>
 
-                {/* Comment Button */}
+                {/* Comment Button (Toggles Inline View in Feed) */}
                 <button
-                  onClick={() => setActiveCommentPostId(post.id)}
-                  className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer"
+                  type="button"
+                  onClick={() => handleToggleInlineComments(post.id)}
+                  className={`flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    expandedCommentsPostIds[post.id] ? 'text-emerald-300 font-bold' : 'hover:text-white'
+                  }`}
+                  title="Toggle comments directly inside the feed"
                 >
                   <MessageCircle className="h-4 w-4 text-emerald-400" />
-                  <span>{post.commentsCount} comments</span>
+                  <span>{post.commentsCount} {post.commentsCount === 1 ? 'comment' : 'comments'}</span>
+                  {expandedCommentsPostIds[post.id] ? (
+                    <ChevronUp className="h-3 w-3 text-emerald-400" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 text-emerald-400/70" />
+                  )}
                 </button>
 
                 {/* Author Share Permission Aware Button */}
@@ -928,6 +961,55 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                   </button>
                 )}
               </div>
+
+              {/* INLINE COMMENTS: Reveals conversation right inside the feed so nothing is hiding! */}
+              {expandedCommentsPostIds[post.id] && (
+                <div className="mt-2.5 pt-2 border-t border-emerald-900/60 space-y-2 animate-in fade-in">
+                  {/* Comments List */}
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {(post.comments && post.comments.length > 0) ? (
+                      post.comments.map(c => (
+                        <div key={c.id} className="p-2 rounded bg-[#021812] border border-emerald-900/60 text-xs space-y-0.5">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-mono font-bold text-emerald-300">@{c.authorHandle}</span>
+                            <span className="text-emerald-500/70">{c.createdAtText}</span>
+                          </div>
+                          <p className="text-emerald-100 text-[11px] leading-snug">{c.text}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-2 text-emerald-500/70 text-[11px] italic">
+                        No comments yet. Be the first to share intel!
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline Quick Comment Input */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Write a comment..."
+                      value={inlineCommentInputs[post.id] || ''}
+                      onChange={(e) => setInlineCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddInlineComment(post.id);
+                        }
+                      }}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#021812] border border-emerald-900/80 text-xs text-emerald-100 placeholder-emerald-600 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddInlineComment(post.id)}
+                      disabled={!(inlineCommentInputs[post.id] || '').trim()}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-slate-950 font-bold text-xs shadow-sm transition-colors"
+                    >
+                      Reply
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1221,7 +1303,7 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
 
       {/* VIEW 3: IN-APP YOUTUBE SEARCH, WATCH, & MESH SHARING */}
       {subTab === 'youtube' && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           
           {/* Zero API Key Clarification Banner */}
           <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-2 text-xs">
@@ -1342,22 +1424,15 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Action Buttons: Watch, Share to Chat, Share to Notice, Copy */}
-                      <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-emerald-900/60 text-[10px]">
+                      {/* Action Buttons: To Chat, To Social, Save Offline (Zero Redundancy) */}
+                      <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-emerald-900/60 text-[10.5px]">
                         <button
-                          onClick={() => setActiveWatchingVideo(vid)}
-                          className="py-1.5 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold flex items-center justify-center gap-1"
-                        >
-                          <Play className="h-3 w-3 fill-slate-950" />
-                          <span>Watch</span>
-                        </button>
-
-                        <button
+                          type="button"
                           onClick={() => {
                             onShareToChat?.(`🎥 [YouTube Guide]: "${vid.title}" - Watch: ${vid.videoUrl}`, 'VIDEO', vid.title);
                             onLogEvent('YouTubeShare', `Shared video "${vid.title}" to Mesh Chat!`, 'success');
                           }}
-                          className="py-1.5 px-1.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1"
+                          className="py-1.5 px-2 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1 transition-colors"
                           title="Share to active Mesh Chat"
                         >
                           <MessageCircle className="h-3 w-3 text-emerald-400" />
@@ -1367,36 +1442,21 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleShareVideoToSocial(vid.title, vid.videoUrl, vid.channelName, vid.category, vid.sizeMb)}
-                          className="py-1.5 px-1.5 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1 transition-colors"
+                          className="py-1.5 px-2 rounded bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-700/60 font-semibold flex items-center justify-center gap-1 transition-colors"
                           title="Share video to Social Feed"
                         >
                           <Share2 className="h-3 w-3 text-emerald-400" />
                           <span>To Social</span>
                         </button>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1 text-[9px] text-emerald-400/80">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard?.writeText(vid.videoUrl);
-                            setCopiedId(vid.id);
-                            setTimeout(() => setCopiedId(null), 2000);
-                            onLogEvent('Clipboard', `Copied link: ${vid.videoUrl}`, 'info');
-                          }}
-                          className="flex items-center gap-1 hover:text-white"
-                        >
-                          {copiedId === vid.id ? <Check className="h-2.5 w-2.5 text-emerald-300" /> : <Copy className="h-2.5 w-2.5" />}
-                          <span>{copiedId === vid.id ? 'Copied Link!' : 'Copy Link'}</span>
-                        </button>
-
-                        <span>•</span>
 
                         <button
+                          type="button"
                           onClick={() => onDownloadFile(`${vid.id}.mp4`, vid.sizeMb * 1024 * 1024)}
-                          className="flex items-center gap-1 hover:text-white"
+                          className="py-1.5 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold flex items-center justify-center gap-1 transition-colors shadow-sm"
+                          title="Save video locally for offline playback"
                         >
-                          <Download className="h-2.5 w-2.5" />
-                          <span>Cache for Offline Swarm</span>
+                          <Download className="h-3 w-3" />
+                          <span>Save Offline</span>
                         </button>
                       </div>
                     </div>
@@ -1530,36 +1590,23 @@ export const SocialAndReelsView: React.FC<SocialAndReelsViewProps> = ({
                 className="hidden"
               />
 
-              {/* Real Device Storage File Picker Button */}
+              {/* Real Device Storage File Picker Button (Consolidated) */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-emerald-400 block font-semibold">Media Attachment:</label>
+                <label className="text-[10px] text-emerald-400 block font-semibold">Media Attachment (Optional):</label>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full p-2.5 rounded-lg border border-emerald-500/60 bg-[#043324] hover:bg-emerald-800/50 text-xs font-semibold text-emerald-100 flex items-center justify-center gap-2 shadow-inner transition-colors"
+                  className="w-full p-2.5 rounded-lg border border-emerald-500/60 bg-[#043324] hover:bg-emerald-800/50 text-xs font-semibold text-emerald-100 flex items-center justify-between px-3 shadow-inner transition-colors"
                 >
-                  <Folder className="h-4 w-4 text-emerald-300" />
-                  <span>Pick File from Phone Storage (Video / Photo)</span>
+                  <div className="flex items-center gap-2">
+                    <Folder className="h-4 w-4 text-emerald-300" />
+                    <span>Choose File from Storage (Video / Photo)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-400/80">
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    <Video className="h-3.5 w-3.5" />
+                  </div>
                 </button>
-
-                <div className="grid grid-cols-2 gap-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectUpload('VIDEO')}
-                    className="p-1.5 rounded border border-emerald-800/80 bg-[#032219] hover:bg-[#042d21] text-[11px] text-emerald-300 flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Video className="h-3 w-3 text-emerald-400" />
-                    <span>Quick Video Clip</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectUpload('IMAGE')}
-                    className="p-1.5 rounded border border-emerald-800/80 bg-[#032219] hover:bg-[#042d21] text-[11px] text-emerald-300 flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <ImageIcon className="h-3 w-3 text-teal-400" />
-                    <span>Quick Photo</span>
-                  </button>
-                </div>
               </div>
 
               {/* Group Origin Tag Selector (Share From Group) */}

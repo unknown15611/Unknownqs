@@ -2,25 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Volume2,
   VolumeX,
-  Mic,
-  Radio,
-  Sliders,
   Play,
   Square,
   Users,
+  Radio,
   Zap,
   Activity,
   X,
-  Shield,
-  Wifi,
-  Share2,
   FolderOpen,
   FileAudio,
   Repeat,
   Megaphone,
-  Sparkles,
-  Clock,
-  Music,
   CheckCircle2,
   AlertTriangle,
   Upload
@@ -41,8 +33,7 @@ import {
 import { rssiToSignalPercentage } from '../core/securityAndLockdown';
 import {
   isStoragePermissionGranted,
-  updateStoragePermissionState,
-  getStoragePermissionState
+  updateStoragePermissionState
 } from '../core/storagePermissions';
 
 interface SpeakerSyncModalProps {
@@ -62,19 +53,11 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
   const [role, setRole] = useState<'HOST' | 'LISTENER'>('HOST');
   const [localVolume, setLocalVolume] = useState<number>(95);
   const [isLocalMuted, setIsLocalMuted] = useState<boolean>(false);
-  const [fineTuneDriftMs, setFineTuneDriftMs] = useState<number>(0);
-  const [activeCategory, setActiveCategory] = useState<'SLOGAN' | 'SPEECH' | 'STORAGE' | 'MIC_SIREN'>('SLOGAN');
-  
-  // Slogan & Speech states
-  const [selectedSlogan, setSelectedSlogan] = useState<SloganChantItem>(SLOGAN_PRESETS[0]);
-  const [selectedSpeech, setSelectedSpeech] = useState<PublicSpeechItem>(SPEECH_PRESETS[0]);
-  const [isSloganLooped, setIsSloganLooped] = useState<boolean>(true);
-  
-  // Custom storage file
+  const [activeTab, setActiveTab] = useState<'SLOGAN' | 'SPEECH' | 'STORAGE' | 'SIREN'>('SLOGAN');
+  const [isLooped, setIsLooped] = useState<boolean>(true);
   const [customFileMeta, setCustomFileMeta] = useState<StorageAudioFileMeta | null>(null);
-  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
-  // Audio Context and Elements
+  // Web Audio Context & Elements
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscRef = useRef<OscillatorNode | null>(null);
   const intervalRef = useRef<number | null>(null);
@@ -97,7 +80,7 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
         setSession(prev => {
           const nextPos = prev.playbackPositionSec + 1;
           if (nextPos >= prev.totalDurationSec) {
-            if (prev.isLooped) {
+            if (isLooped) {
               return { ...prev, playbackPositionSec: 0 };
             }
             return { ...prev, isPlaying: false, playbackPositionSec: 0 };
@@ -107,7 +90,7 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [session.isPlaying]);
+  }, [session.isPlaying, isLooped]);
 
   const startChantRhythm = (bpm: number = 120) => {
     stopTone();
@@ -115,7 +98,6 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioCtxRef.current = ctx;
 
-      // Play rhythmic protest cadence bursts (two-tone rally pulse)
       const intervalMs = (60 / bpm) * 1000;
       let step = 0;
 
@@ -125,12 +107,12 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
         const gain = audioCtxRef.current.createGain();
         osc.type = step % 2 === 0 ? 'sine' : 'triangle';
         osc.frequency.setValueAtTime(step % 2 === 0 ? 440 : 587.33, audioCtxRef.current.currentTime);
-        gain.gain.setValueAtTime(0.04, audioCtxRef.current.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRef.current.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.035, audioCtxRef.current.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRef.current.currentTime + 0.16);
         osc.connect(gain);
         gain.connect(audioCtxRef.current.destination);
         osc.start();
-        osc.stop(audioCtxRef.current.currentTime + 0.2);
+        osc.stop(audioCtxRef.current.currentTime + 0.18);
         step = (step + 1) % 4;
       };
 
@@ -191,35 +173,27 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
   const playSelectedAudio = (sourceType: AudioSourceType) => {
     stopAllAudio();
     if (sourceType === 'SLOGAN_CHANT') {
-      startChantRhythm(selectedSlogan.rhythmBpm);
+      startChantRhythm(120);
     } else if (sourceType === 'PUBLIC_SPEECH') {
-      startChantRhythm(85);
+      startChantRhythm(90);
     } else if (sourceType === 'SIREN_ALERT') {
       startContinuousTone(1200);
     } else if (sourceType === 'STORAGE_FILE') {
       if (audioElementRef.current && customFileMeta?.objectUrl) {
         audioElementRef.current.src = customFileMeta.objectUrl;
-        audioElementRef.current.loop = isSloganLooped;
-        audioElementRef.current.play().catch(() => {
-          // Playback gesture policy fallback
-        });
+        audioElementRef.current.loop = isLooped;
+        audioElementRef.current.play().catch(() => {});
       } else {
         startChantRhythm(105);
       }
-    } else {
-      startChantRhythm(110);
     }
   };
 
   if (!isOpen) return null;
 
-  // Handle Storage File Selection with Android Permissions
   const handlePickStorageFile = () => {
-    // Check Android runtime storage permission
     if (!isStoragePermissionGranted()) {
       updateStoragePermissionState('ALLOW');
-      setPermissionNotice('Granted Android READ_MEDIA_AUDIO & READ_EXTERNAL_STORAGE permission.');
-      setTimeout(() => setPermissionNotice(null), 3500);
       onLogEvent?.('StoragePermission', 'READ_MEDIA_AUDIO granted for speaker sync playback.', 'success');
     }
     fileInputRef.current?.click();
@@ -234,59 +208,48 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
       fileName: file.name,
       fileSizeBytes: file.size,
       mimeType: file.type || 'audio/unknown',
-      durationSec: 180, // estimated or updated on load
+      durationSec: 180,
       isCustomUploaded: true,
       objectUrl
     };
 
     setCustomFileMeta(meta);
-    setActiveCategory('STORAGE');
+    setActiveTab('STORAGE');
 
-    // Automatically set up session
     const newSession = createSpeakerHostSession(
       currentHandle,
       'STORAGE_FILE',
-      `Storage Audio: ${file.name}`,
+      file.name,
       meta
     );
-    newSession.isLooped = isSloganLooped;
+    newSession.isLooped = isLooped;
     setSession(newSession);
     setRole('HOST');
     playSelectedAudio('STORAGE_FILE');
 
-    onLogEvent?.(
-      'SpeakerSync',
-      `Loaded storage file "${file.name}" (${(file.size / (1024 * 1024)).toFixed(2)} MB, ${file.type || 'audio'}) for mesh broadcast.`,
-      'success'
-    );
+    onLogEvent?.('SpeakerSync', `Loaded "${file.name}" for synchronized speaker broadcast.`, 'success');
   };
 
-  const handleStartSloganHost = (slogan: SloganChantItem) => {
-    setSelectedSlogan(slogan);
+  const handleStartSlogan = (slogan: SloganChantItem) => {
     const newSession = createSpeakerHostSession(
       currentHandle,
       'SLOGAN_CHANT',
-      `${slogan.title} (${slogan.urduTitle})`
+      slogan.title
     );
-    newSession.isLooped = isSloganLooped;
+    newSession.isLooped = isLooped;
     newSession.totalDurationSec = slogan.durationSec;
     newSession.activeSloganId = slogan.id;
     setSession(newSession);
     setRole('HOST');
     playSelectedAudio('SLOGAN_CHANT');
-    onLogEvent?.(
-      'SpeakerSync',
-      `Started synchronized slogan rally broadcast: "${slogan.title}" at ${slogan.rhythmBpm} BPM.`,
-      'success'
-    );
+    onLogEvent?.('SpeakerSync', `Started slogan broadcast: ${slogan.title}`, 'success');
   };
 
-  const handleStartSpeechHost = (speech: PublicSpeechItem) => {
-    setSelectedSpeech(speech);
+  const handleStartSpeech = (speech: PublicSpeechItem) => {
     const newSession = createSpeakerHostSession(
       currentHandle,
       'PUBLIC_SPEECH',
-      `${speech.speaker}: ${speech.title}`
+      speech.title
     );
     newSession.isLooped = false;
     newSession.totalDurationSec = speech.durationSec;
@@ -294,35 +257,25 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
     setSession(newSession);
     setRole('HOST');
     playSelectedAudio('PUBLIC_SPEECH');
-    onLogEvent?.(
-      'SpeakerSync',
-      `Started synchronized keynote speech broadcast: "${speech.title}" by ${speech.speaker}.`,
-      'success'
-    );
+    onLogEvent?.('SpeakerSync', `Started keynote speech: ${speech.title}`, 'success');
   };
 
-  const handleTogglePlayback = () => {
+  const handleTogglePlay = () => {
     const nextState = !session.isPlaying;
     setSession(prev => ({ ...prev, isPlaying: nextState }));
     if (nextState) {
       playSelectedAudio(session.sourceType);
-      onLogEvent?.('SpeakerSync', `Resumed synchronized audio playback: ${session.sourceTitle}`, 'info');
     } else {
       stopAllAudio();
-      onLogEvent?.('SpeakerSync', 'Paused synchronized multi-device broadcast.', 'info');
     }
   };
 
-  const handleJoinHost = () => {
+  const handleJoin = () => {
     const joined = joinSpeakerSession(session, currentHandle);
     setSession(joined);
     setRole('LISTENER');
     playSelectedAudio(session.sourceType);
-    onLogEvent?.(
-      'SpeakerSync',
-      `Joined host session ${session.sessionId} (@${session.hostHandle}) as synchronized speaker.`,
-      'success'
-    );
+    onLogEvent?.('SpeakerSync', `Joined synchronized host @${session.hostHandle}.`, 'success');
   };
 
   const formatSecs = (sec: number) => {
@@ -333,442 +286,238 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 animate-in fade-in select-none">
-      {/* Hidden file input for ANY audio or video file from phone storage */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.aac,.opus,.flac,.mp4,.webm,.mkv"
+        accept="audio/*,video/*"
         className="hidden"
       />
+      <audio ref={audioElementRef} className="hidden" />
 
-      {/* Hidden audio element for real storage file acoustic playback */}
-      <audio
-        ref={audioElementRef}
-        onEnded={() => {
-          if (!isSloganLooped) {
-            setSession(prev => ({ ...prev, isPlaying: false, playbackPositionSec: 0 }));
-          }
-        }}
-        className="hidden"
-      />
-
-      <div className="w-full max-w-sm rounded-2xl border border-emerald-500/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col p-4 space-y-3 max-h-[92vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-              <Megaphone className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-xs font-bold text-white">Speaker Sync & Megaphone</h3>
-                <span className="text-[8.5px] px-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono">
-                  PTP &lt;3ms
-                </span>
-              </div>
-              <span className="text-[10px] text-slate-400 font-mono">
-                Storage Audio, Slogans & Speech Acoustic Sync
-              </span>
-            </div>
+      <div className="w-full max-w-sm rounded-2xl border border-emerald-500/40 bg-slate-900 shadow-2xl overflow-hidden flex flex-col p-3.5 space-y-2.5 max-h-[88vh]">
+        {/* Sleek Compact Header */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-1.5 text-white">
+            <Megaphone className="h-4 w-4 text-emerald-400" />
+            <h3 className="text-xs font-bold">Speaker Sync</h3>
+            <span className="text-[8px] font-mono px-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+              PTP &lt;3ms
+            </span>
           </div>
-          <button
-            onClick={() => {
-              stopAllAudio();
-              onClose();
-            }}
-            className="text-slate-400 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        {/* Permission Banner Notice */}
-        {permissionNotice && (
-          <div className="p-2 rounded-lg bg-emerald-950/80 border border-emerald-500/50 flex items-center gap-2 text-[10px] text-emerald-300 animate-in fade-in">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span>{permissionNotice}</span>
+          <div className="flex items-center gap-1.5">
+            {/* Host vs Listen Switch */}
+            <div className="flex bg-slate-950 rounded-md p-0.5 border border-slate-800 text-[9px] font-bold">
+              <button
+                type="button"
+                onClick={() => setRole('HOST')}
+                className={`px-1.5 py-0.5 rounded transition-all ${
+                  role === 'HOST' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400'
+                }`}
+              >
+                Host
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRole('LISTENER');
+                  handleJoin();
+                }}
+                className={`px-1.5 py-0.5 rounded transition-all ${
+                  role === 'LISTENER' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400'
+                }`}
+              >
+                Listen
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                stopAllAudio();
+                onClose();
+              }}
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        )}
-
-        {/* Role Switcher: Host vs Listener */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setRole('HOST')}
-            className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              role === 'HOST'
-                ? 'bg-emerald-600 text-slate-950 shadow-sm font-extrabold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />
-            <span>Host Session</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('LISTENER')}
-            className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              role === 'LISTENER'
-                ? 'bg-emerald-600 text-slate-950 shadow-sm font-extrabold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="h-3.5 w-3.5" />
-            <span>Join Listener</span>
-          </button>
         </div>
 
-        {/* Category Tabs: Slogans, Speeches, Storage File, Mic/Siren */}
-        <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800 text-[10px] font-bold">
-          <button
-            type="button"
-            onClick={() => setActiveCategory('SLOGAN')}
-            className={`py-1.5 px-1 rounded-lg text-center transition-all ${
-              activeCategory === 'SLOGAN'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            📢 Slogans
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveCategory('SPEECH')}
-            className={`py-1.5 px-1 rounded-lg text-center transition-all ${
-              activeCategory === 'SPEECH'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            🎙️ Speeches
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveCategory('STORAGE')}
-            className={`py-1.5 px-1 rounded-lg text-center transition-all ${
-              activeCategory === 'STORAGE'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            📂 Storage
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveCategory('MIC_SIREN')}
-            className={`py-1.5 px-1 rounded-lg text-center transition-all ${
-              activeCategory === 'MIC_SIREN'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            🚨 Live/Siren
-          </button>
+        {/* Clean Source Selector Pills */}
+        <div className="grid grid-cols-4 gap-1 p-0.5 bg-slate-950 rounded-lg border border-slate-800 text-[10px] font-bold text-center">
+          {[
+            { id: 'SLOGAN', label: '📢 Slogans' },
+            { id: 'SPEECH', label: '🎙️ Speeches' },
+            { id: 'STORAGE', label: '📂 Storage' },
+            { id: 'SIREN', label: '🚨 Siren' }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id as any)}
+              className={`py-1 rounded-md transition-all ${
+                activeTab === t.id
+                  ? 'bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* MAIN BODY: CATEGORY CONTENT */}
-        <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 max-h-[36vh]">
-          {/* CATEGORY 1: SLOGANS & CHANTS */}
-          {activeCategory === 'SLOGAN' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
-                  Synchronized Rally Slogans:
-                </span>
-                {/* Loop / Repeat Toggle */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !isSloganLooped;
-                    setIsSloganLooped(next);
-                    setSession(prev => ({ ...prev, isLooped: next }));
-                  }}
-                  className={`flex items-center gap-1 text-[9.5px] px-2 py-0.5 rounded-full border transition-all ${
-                    isSloganLooped
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
-                      : 'bg-slate-900 text-slate-400 border-slate-700'
+        {/* Minimalist Content List */}
+        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+          {activeTab === 'SLOGAN' && (
+            SLOGAN_PRESETS.map(s => {
+              const isSelected = session.sourceType === 'SLOGAN_CHANT' && session.activeSloganId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`p-2 rounded-lg border flex items-center justify-between text-xs transition-all ${
+                    isSelected
+                      ? 'bg-emerald-950/40 border-emerald-500/60'
+                      : 'bg-slate-950 border-slate-800'
                   }`}
                 >
-                  <Repeat className="h-3 w-3" />
-                  <span>Loop: {isSloganLooped ? 'ON (Continuous)' : 'OFF'}</span>
-                </button>
-              </div>
-
-              {SLOGAN_PRESETS.map((slogan) => {
-                const isCurrent = session.sourceType === 'SLOGAN_CHANT' && session.activeSloganId === slogan.id;
-                return (
-                  <div
-                    key={slogan.id}
-                    className={`p-2.5 rounded-xl border text-xs transition-all ${
-                      isCurrent
-                        ? 'bg-emerald-950/40 border-emerald-500/60 shadow-md'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                  <div className="truncate max-w-[210px]">
+                    <span className="font-bold text-white text-[11px] block truncate">{s.title}</span>
+                    <span className="text-[9.5px] text-emerald-400/90 font-urdu block">{s.urduTitle}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartSlogan(s)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 flex items-center gap-1 ${
+                      isSelected && session.isPlaying
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-100 text-xs">{slogan.title}</span>
-                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-                            {slogan.rhythmBpm} BPM
-                          </span>
-                        </div>
-                        <span className="text-[10.5px] text-emerald-300 font-medium font-urdu block mt-0.5">
-                          {slogan.urduTitle}
-                        </span>
-                        <p className="text-[10px] text-slate-400 italic mt-1 bg-slate-900/60 p-1 rounded border border-slate-800/80">
-                          &ldquo;{slogan.sampleLyrics}&rdquo;
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleStartSloganHost(slogan)}
-                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold shrink-0 flex items-center gap-1 transition-all ${
-                          isCurrent && session.isPlaying
-                            ? 'bg-amber-500 text-slate-950 shadow'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow'
-                        }`}
-                      >
-                        {isCurrent && session.isPlaying ? (
-                          <>
-                            <Square className="h-3 w-3 fill-slate-950" />
-                            <span>Active</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="h-3 w-3 fill-slate-950" />
-                            <span>Broadcast</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* CATEGORY 2: PUBLIC SPEECHES */}
-          {activeCategory === 'SPEECH' && (
-            <div className="space-y-2">
-              <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wide block">
-                Synchronized Addresses & Speeches:
-              </span>
-
-              {SPEECH_PRESETS.map((speech) => {
-                const isCurrent = session.sourceType === 'PUBLIC_SPEECH' && session.activeSpeechId === speech.id;
-                return (
-                  <div
-                    key={speech.id}
-                    className={`p-2.5 rounded-xl border text-xs transition-all ${
-                      isCurrent
-                        ? 'bg-emerald-950/40 border-emerald-500/60 shadow-md'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-100 text-xs">{speech.speaker}</span>
-                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-300">
-                            {formatSecs(speech.durationSec)}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-semibold text-emerald-300 block">
-                          {speech.title}
-                        </span>
-                        <p className="text-[9.5px] text-slate-400 leading-snug">
-                          {speech.description}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleStartSpeechHost(speech)}
-                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold shrink-0 flex items-center gap-1 transition-all ${
-                          isCurrent && session.isPlaying
-                            ? 'bg-amber-500 text-slate-950 shadow'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow'
-                        }`}
-                      >
-                        {isCurrent && session.isPlaying ? (
-                          <>
-                            <Square className="h-3 w-3 fill-slate-950" />
-                            <span>Active</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="h-3 w-3 fill-slate-950" />
-                            <span>Sync Speech</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* CATEGORY 3: STORAGE FILE (ANY FILE TYPE) */}
-          {activeCategory === 'STORAGE' && (
-            <div className="space-y-2.5">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-200 font-bold">
-                    <FolderOpen className="h-4 w-4 text-emerald-400" />
-                    <span>Device Storage Audio File</span>
-                  </div>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                    Any Audio / Video Format
-                  </span>
+                    {isSelected && session.isPlaying ? <Square className="h-2.5 w-2.5 fill-slate-950" /> : <Play className="h-2.5 w-2.5 fill-slate-950" />}
+                    <span>{isSelected && session.isPlaying ? 'Stop' : 'Sync'}</span>
+                  </button>
                 </div>
+              );
+            })
+          )}
 
-                <p className="text-[10px] text-slate-400 leading-relaxed">
-                  Select any audio or video recording from phone storage (MP3, WAV, AAC, M4A, OGG, OPUS, MP4, FLAC). The audio stream is synchronized across all nearby devices via PTP Wi-Fi Direct.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handlePickStorageFile}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+          {activeTab === 'SPEECH' && (
+            SPEECH_PRESETS.map(sp => {
+              const isSelected = session.sourceType === 'PUBLIC_SPEECH' && session.activeSpeechId === sp.id;
+              return (
+                <div
+                  key={sp.id}
+                  className={`p-2 rounded-lg border flex items-center justify-between text-xs transition-all ${
+                    isSelected
+                      ? 'bg-emerald-950/40 border-emerald-500/60'
+                      : 'bg-slate-950 border-slate-800'
+                  }`}
                 >
-                  <Upload className="h-4 w-4" />
-                  <span>Choose File From Storage</span>
-                </button>
-              </div>
-
-              {customFileMeta ? (
-                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/40 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold text-white truncate max-w-[210px]">
-                      <FileAudio className="h-4 w-4 text-emerald-400 shrink-0" />
-                      <span className="truncate">{customFileMeta.fileName}</span>
-                    </div>
-                    <span className="text-[9px] font-mono text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/30">
-                      {(customFileMeta.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
-                    </span>
+                  <div className="truncate max-w-[210px]">
+                    <span className="font-bold text-white text-[11px] block truncate">{sp.speaker}</span>
+                    <span className="text-[9.5px] text-slate-400 truncate block">{sp.title}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                    <span>MIME: {customFileMeta.mimeType}</span>
-                    <span>Status: Loaded & P2P Stream Ready</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartSpeech(sp)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 flex items-center gap-1 ${
+                      isSelected && session.isPlaying
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                    }`}
+                  >
+                    {isSelected && session.isPlaying ? <Square className="h-2.5 w-2.5 fill-slate-950" /> : <Play className="h-2.5 w-2.5 fill-slate-950" />}
+                    <span>{isSelected && session.isPlaying ? 'Stop' : 'Sync'}</span>
+                  </button>
                 </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-dashed border-slate-800 text-center text-[10px] text-slate-500 font-mono">
-                  No file selected yet. Tap &ldquo;Choose File From Storage&rdquo; above.
+              );
+            })
+          )}
+
+          {activeTab === 'STORAGE' && (
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 text-center">
+              <button
+                type="button"
+                onClick={handlePickStorageFile}
+                className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>Select Any Audio / Video File</span>
+              </button>
+              {customFileMeta && (
+                <div className="flex items-center justify-between text-[10px] text-emerald-300 font-mono px-1">
+                  <span className="truncate max-w-[180px]">{customFileMeta.fileName}</span>
+                  <span>{(customFileMeta.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* CATEGORY 4: LIVE MIC & EMERGENCY SIREN */}
-          {activeCategory === 'MIC_SIREN' && (
-            <div className="space-y-2">
-              <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wide block">
-                Emergency & Voice Broadcasts:
-              </span>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newSession = createSpeakerHostSession(currentHandle, 'LIVE_MIC');
-                    setSession(newSession);
-                    setRole('HOST');
-                    playSelectedAudio('LIVE_MIC');
-                  }}
-                  className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                    session.sourceType === 'LIVE_MIC' && session.isPlaying
-                      ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200'
-                      : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Mic className="h-4 w-4 text-emerald-400" />
-                    <span className="font-bold text-xs">Live Megaphone</span>
-                  </div>
-                  <span className="text-[9.5px] text-slate-400">Microphone voice direct to all phone speakers</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newSession = createSpeakerHostSession(currentHandle, 'SIREN_ALERT');
-                    setSession(newSession);
-                    setRole('HOST');
-                    playSelectedAudio('SIREN_ALERT');
-                  }}
-                  className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                    session.sourceType === 'SIREN_ALERT' && session.isPlaying
-                      ? 'bg-red-950/50 border-red-500 text-red-200'
-                      : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-4 w-4 text-red-400" />
-                    <span className="font-bold text-xs">Emergency Siren</span>
-                  </div>
-                  <span className="text-[9.5px] text-slate-400">1.2kHz high-piercing emergency alarm tone</span>
-                </button>
+          {activeTab === 'SIREN' && (
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-red-300 block">Emergency Siren</span>
+                <span className="text-[9.5px] text-slate-400">1.2kHz Acoustic Alarm</span>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newSession = createSpeakerHostSession(currentHandle, 'SIREN_ALERT');
+                  setSession(newSession);
+                  setRole('HOST');
+                  playSelectedAudio('SIREN_ALERT');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+              >
+                Trigger Siren
+              </button>
             </div>
           )}
         </div>
 
-        {/* ACTIVE BROADCAST CONTROLS & TIMELINE SCRUBBER */}
-        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+        {/* Minimalist Unified Player Bar */}
+        <div className="p-2.5 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1.5 text-xs">
           <div className="flex items-center justify-between">
             <div className="truncate max-w-[200px]">
-              <span className="text-[10px] text-slate-400 font-mono block">
-                {role === 'HOST' ? 'Broadcasting:' : `Receiving from @${session.hostHandle}:`}
-              </span>
-              <span className="font-bold text-white text-xs truncate block">
-                {session.sourceTitle}
-              </span>
+              <span className="text-[9px] text-slate-400 font-mono block">NOW PLAYING:</span>
+              <span className="font-bold text-white text-[11px] truncate block">{session.sourceTitle}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
-              {role === 'HOST' ? (
-                <button
-                  type="button"
-                  onClick={handleTogglePlayback}
-                  className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow transition-all ${
-                    session.isPlaying
-                      ? 'bg-amber-500 text-slate-950'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
-                  }`}
-                >
-                  {session.isPlaying ? (
-                    <>
-                      <Square className="h-3 w-3 fill-slate-950" />
-                      <span>Pause</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3 w-3 fill-slate-950" />
-                      <span>Play</span>
-                    </>
-                  )}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleJoinHost}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center gap-1 shadow"
-                >
-                  <Zap className="h-3 w-3" />
-                  <span>Sync In</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isLooped;
+                  setIsLooped(next);
+                  setSession(prev => ({ ...prev, isLooped: next }));
+                }}
+                className={`p-1 rounded text-[9px] font-mono border transition-all ${
+                  isLooped
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+                    : 'bg-slate-900 text-slate-500 border-slate-800'
+                }`}
+                title="Continuous loop"
+              >
+                <Repeat className="h-3 w-3" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTogglePlay}
+                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 shadow ${
+                  session.isPlaying ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 text-slate-950'
+                }`}
+              >
+                {session.isPlaying ? <Square className="h-3 w-3 fill-slate-950" /> : <Play className="h-3 w-3 fill-slate-950" />}
+                <span>{session.isPlaying ? 'Pause' : 'Play'}</span>
+              </button>
             </div>
           </div>
 
-          {/* Scrubber / Progress Bar */}
-          <div className="space-y-1">
-            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+          {/* Scrubber Progress Bar */}
+          <div className="space-y-0.5">
+            <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
               <div
                 className="bg-emerald-500 h-full transition-all duration-300"
                 style={{
@@ -776,27 +525,20 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
                 }}
               />
             </div>
-            <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+            <div className="flex justify-between text-[8.5px] font-mono text-slate-400">
               <span>{formatSecs(session.playbackPositionSec)}</span>
-              <div className="flex items-center gap-1">
-                {session.isLooped && (
-                  <span className="text-emerald-400 flex items-center gap-0.5">
-                    <Repeat className="h-2.5 w-2.5" /> Loop
-                  </span>
-                )}
-                <span>/ {formatSecs(session.totalDurationSec)}</span>
-              </div>
+              <span>{formatSecs(session.totalDurationSec)}</span>
             </div>
           </div>
 
-          {/* Volume and Acoustic Delay Compensation */}
-          <div className="pt-1 flex items-center gap-2">
+          {/* Volume Control */}
+          <div className="flex items-center gap-2 pt-0.5">
             <button
               type="button"
               onClick={() => setIsLocalMuted(!isLocalMuted)}
-              className="p-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+              className="p-1 rounded bg-slate-900 text-slate-300 hover:text-white"
             >
-              {isLocalMuted ? <VolumeX className="h-3.5 w-3.5 text-rose-400" /> : <Volume2 className="h-3.5 w-3.5 text-emerald-400" />}
+              {isLocalMuted ? <VolumeX className="h-3 w-3 text-rose-400" /> : <Volume2 className="h-3 w-3 text-emerald-400" />}
             </button>
             <input
               type="range"
@@ -807,79 +549,43 @@ export const SpeakerSyncModal: React.FC<SpeakerSyncModalProps> = ({
                 setLocalVolume(Number(e.target.value));
                 setIsLocalMuted(false);
               }}
-              className="flex-1 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              className="flex-1 accent-emerald-500 h-1 bg-slate-800 rounded cursor-pointer"
             />
-            <span className="text-[10px] font-mono text-slate-300 w-8 text-right">
+            <span className="text-[9px] font-mono text-slate-300 w-7 text-right">
               {isLocalMuted ? '0%' : `${localVolume}%`}
             </span>
           </div>
-
-          {role === 'LISTENER' && (
-            <div className="space-y-1 pt-1 border-t border-slate-800">
-              <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400">
-                <span>Acoustic Delay Compensation:</span>
-                <span className="text-emerald-300 font-bold">{fineTuneDriftMs > 0 ? `+${fineTuneDriftMs}` : fineTuneDriftMs} ms</span>
-              </div>
-              <input
-                type="range"
-                min="-20"
-                max="20"
-                step="1"
-                value={fineTuneDriftMs}
-                onChange={(e) => setFineTuneDriftMs(Number(e.target.value))}
-                className="w-full accent-emerald-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
-          )}
         </div>
 
-        {/* Synchronized Peers List */}
+        {/* Compact Connected Peers Strip */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400">
-            <span>SYNCHRONIZED PEER SPEAKERS ({session.connectedNodes.length}):</span>
-            <span className="text-emerald-400">PTP Drift &lt; 2.5ms</span>
+          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+            <span>SYNCED SPEAKERS ({session.connectedNodes.length}):</span>
+            <span className="text-emerald-400">Drift &lt; 2ms</span>
           </div>
-
-          <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
-            {session.connectedNodes.map((node) => (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {session.connectedNodes.map(node => (
               <div
                 key={node.id}
-                className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px]"
+                className="px-2 py-1 rounded bg-slate-950 border border-slate-800 flex items-center gap-1 shrink-0 text-[9.5px] font-mono"
               >
-                <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-mono font-bold text-slate-200">@{node.handle}</span>
-                  {node.isHost && (
-                    <span className="text-[8px] px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
-                      HOST
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 text-[9.5px] font-mono">
-                  <span className="text-emerald-400">
-                    {node.driftMs >= 0 ? `+${node.driftMs.toFixed(1)}ms` : `${node.driftMs.toFixed(1)}ms`}
-                  </span>
-                  <span className="text-slate-400">
-                    {rssiToSignalPercentage(node.rssiDbm)}% 📶
-                  </span>
-                </div>
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-bold text-slate-200">@{node.handle}</span>
+                <span className="text-emerald-400 text-[8px]">{node.driftMs >= 0 ? `+${node.driftMs.toFixed(1)}ms` : `${node.driftMs.toFixed(1)}ms`}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-          <span className="text-[9.5px] text-slate-500 font-mono">
-            PTP 1588 • Opus Multicast Audio
-          </span>
+        {/* Minimal Footer */}
+        <div className="pt-1 border-t border-slate-800 flex justify-between items-center text-[9px] text-slate-500 font-mono">
+          <span>Opus Multicast P2P</span>
           <button
             onClick={() => {
               stopAllAudio();
               onClose();
             }}
-            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
+            className="px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
           >
             Done
           </button>

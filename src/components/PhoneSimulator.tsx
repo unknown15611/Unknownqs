@@ -407,6 +407,10 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
   const [activePttChannel, setActivePttChannel] = useState<string>('#lahore-relief');
   const [isPttTransmitting, setIsPttTransmitting] = useState(false);
 
+  // Smart RF Jammer Detection & Acoustic Ultrasound Failover
+  const [isRfJammed, setIsRfJammed] = useState<boolean>(false);
+  const isRadioJammedOrDisabled = isRfJammed || (!radioStatus.wifiMeshEnabled && !radioStatus.bluetoothEnabled);
+
   // Smart Network-Aware Auto-App-Updater
   const [showCellularUpdatePrompt, setShowCellularUpdatePrompt] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
@@ -995,21 +999,59 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
     );
   };
 
+  // Emit real acoustic sound via Web Audio API
+  const emitAcousticTones = (frequencies: number[]) => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      let startTime = ctx.currentTime + 0.05;
+      const duration = 0.04;
+      frequencies.slice(0, 16).forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.025, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+        startTime += duration;
+      });
+    } catch {
+      // AudioContext policy
+    }
+  };
+
   // Transmit Ultrasound
   const handleTransmitUltrasound = () => {
     setUltrasoundState('TRANSMITTING');
-    playFriendlyTone(980, 0.2);
-    onLogEvent('UltrasoundAcoustic', 'Emitting 18.5kHz-19.6kHz inaudible ultrasonic chirp via phone speaker...', 'info');
-
-    const encoded = encodeUltrasoundFrequencies(ultrasoundPayload);
+    const encoded = encodeUltrasoundFrequencies(ultrasoundPayload || 'qaidi156156:LINK');
+    emitAcousticTones(encoded.frequencies);
+    onLogEvent('UltrasoundAcoustic', `Emitting 18.2kHz-20.2kHz ultrasonic chirp sequence (${encoded.frequencies.length} acoustic symbols, CRC-16 0x${encoded.crc16.toString(16)})...`, 'info');
 
     setTimeout(() => {
       setUltrasoundState('SUCCESS');
       const decoded = decodeUltrasoundFrequencies(encoded.frequencies);
       setUltrasoundDecoded(decoded.payload);
       playFriendlyTone(1200, 0.12);
-      onLogEvent('UltrasoundAcoustic', `Ultrasound packet decoded successfully: "${decoded.payload}" via microphone!`, 'success');
+      onLogEvent('UltrasoundAcoustic', `Ultrasound packet acoustic transmission completed: "${decoded.payload}" verified!`, 'success');
     }, 1800);
+  };
+
+  // Receive Ultrasound via Mic Listener
+  const handleListenUltrasound = () => {
+    setUltrasoundState('LISTENING');
+    onLogEvent('UltrasoundAcoustic', 'Microphone listening for 18.2kHz-20.2kHz near-field acoustic tones...', 'info');
+
+    setTimeout(() => {
+      const samplePayload = ultrasoundPayload || 'qaidi156156:LINK';
+      const encoded = encodeUltrasoundFrequencies(samplePayload);
+      const decoded = decodeUltrasoundFrequencies(encoded.frequencies);
+      setUltrasoundDecoded(decoded.payload);
+      setUltrasoundState('SUCCESS');
+      playFriendlyTone(1200, 0.12);
+      onLogEvent('UltrasoundAcoustic', `Acoustic packet decoded via microphone: "${decoded.payload}" (CRC Verified: OK)`, 'success');
+    }, 2000);
   };
 
   // Download Modular Dynamic Feature
@@ -1156,7 +1198,6 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             >
               <Radar className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
               <Search className="h-2.5 w-2.5 text-emerald-400" />
-              <QrCode className="h-2.5 w-2.5 text-emerald-400" />
               <span>Radar & Search</span>
             </button>
           </div>
@@ -1259,7 +1300,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         )}
 
         {/* MAIN BODY VIEW CONTENT */}
-        <div className="flex-1 overflow-y-auto bg-slate-950 relative flex flex-col">
+        <div className="flex-1 overflow-hidden bg-slate-950 relative flex flex-col min-h-0">
           {isWiped ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
               <div className="h-14 w-14 rounded-full bg-rose-500/20 border border-rose-500 flex items-center justify-center text-rose-400">
@@ -1961,16 +2002,54 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               </div>
 
               {/* Chat Composer Bar with PROMINENT Video / File Upload Button */}
+              {/* SMART RF JAMMER DETECTION BANNER */}
+              {isRadioJammedOrDisabled && (
+                <div className="mb-1 p-1.5 bg-amber-950/90 border border-amber-500/60 rounded-lg flex items-center justify-between text-[9px] text-amber-200 animate-pulse">
+                  <div className="flex items-center gap-1 font-bold">
+                    <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0" />
+                    <span>RF Jamming Active: Wi-Fi/BLE Blocked • Acoustic Mic Auto-Enabled</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUltrasoundModal(true)}
+                    className="px-1.5 py-0.5 rounded bg-amber-500/30 hover:bg-amber-500/40 border border-amber-400/50 text-amber-100 font-mono text-[8.5px] font-bold"
+                  >
+                    Acoustics
+                  </button>
+                </div>
+              )}
+
+              {/* Chat Composer Bar with PROMINENT Video / File Upload Button */}
               <form onSubmit={handleSendMessage} className="pt-2 border-t border-[#063f2f] flex items-center gap-1.5">
                 {/* PROMINENT FILE / VIDEO UPLOAD BUTTON */}
                 <button
                   type="button"
                   onClick={() => executeWithStoragePermission(() => setShowFileUploadModal(true))}
                   className="p-2 rounded-lg bg-[#042a20] hover:bg-[#063f2f] text-emerald-300 border border-[#095741] transition-colors"
-                  title="Upload Video, Photo, or File"
+                  title="Upload Video, Photo, or File from Storage"
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
+
+                {/* DYNAMIC ULTRASOUND ACOUSTIC MIC BUTTON: ONLY ENABLED WHEN RF IS JAMMED */}
+                {isRadioJammedOrDisabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!chatText.trim()) {
+                        setShowUltrasoundModal(true);
+                      } else {
+                        setUltrasoundPayload(chatText);
+                        handleTransmitUltrasound();
+                        setChatText('');
+                      }
+                    }}
+                    className="p-2 rounded-lg bg-cyan-950/90 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/60 transition-colors animate-pulse"
+                    title="RF Jamming Active: Send message via Inaudible Ultrasound Mic"
+                  >
+                    <Waves className="h-4 w-4 text-cyan-400" />
+                  </button>
+                )}
 
                 <input
                   type="text"
@@ -2130,121 +2209,127 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             />
           ) : activeTab === 'call' ? (
             /* ================= TAB 6: MULTI-CHANNEL PTT & LIVE 2-WAY GROUP CALL ================= */
-            <div className="flex-1 p-3 flex flex-col justify-between space-y-3 overflow-y-auto">
-              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <div className="flex-1 p-2.5 flex flex-col justify-between space-y-2 overflow-y-auto">
+              {/* Compact PTT Header & Active Channels */}
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <PhoneCall className="h-4 w-4 text-emerald-400" />
-                    <span>Multi-Channel Audio PTT</span>
-                  </h4>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                    Full-Duplex Op Codec
+                  <div className="flex items-center gap-1.5">
+                    <PhoneCall className="h-3.5 w-3.5 text-emerald-400" />
+                    <h4 className="text-xs font-bold text-white">Mesh PTT Radio</h4>
+                  </div>
+                  <span className="text-[8.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Opus 16k Full-Duplex
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Listen to multiple group channels simultaneously in background. Hold PTT button to transmit to your active channel.
-                </p>
 
-                {/* Multi-Channel Listening Toggles - Synchronized with Mesh Groups */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">
-                    Group Mesh Channels (Group Voice & PTT Synchronized):
-                  </span>
-                  {groups.map((grp) => {
-                    const ch = grp.name;
-                    const isListening = backgroundListeningChannels.includes(ch);
-                    const isTransmitActive = activePttChannel === ch || selectedGroup.id === grp.id;
-                    return (
-                      <div
-                        key={grp.id}
-                        className={`p-2 rounded-lg border text-xs flex items-center justify-between transition-colors ${
-                          isTransmitActive
-                            ? 'bg-emerald-950/40 border-emerald-500 text-white'
-                            : 'bg-slate-950 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Volume2 className={`h-3.5 w-3.5 ${isListening ? 'text-emerald-400' : 'text-slate-500'}`} />
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-white">{ch}</span>
-                              <span className="text-[9px] font-mono text-emerald-400">({grp.id})</span>
+                {/* Compact Channels Selector Strip */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+                    <span>GROUP CHANNELS:</span>
+                    <span className="text-emerald-400 font-bold">Active: {selectedGroup.name}</span>
+                  </div>
+                  <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                    {groups.map((grp) => {
+                      const ch = grp.name;
+                      const isListening = backgroundListeningChannels.includes(ch);
+                      const isTransmitActive = activePttChannel === ch || selectedGroup.id === grp.id;
+                      return (
+                        <div
+                          key={grp.id}
+                          className={`p-1.5 rounded-lg border text-xs flex items-center justify-between transition-colors ${
+                            isTransmitActive
+                              ? 'bg-emerald-950/40 border-emerald-500 text-white'
+                              : 'bg-slate-950 border-slate-800/80 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate max-w-[170px]">
+                            <Volume2 className={`h-3 w-3 shrink-0 ${isListening ? 'text-emerald-400' : 'text-slate-500'}`} />
+                            <div className="truncate">
+                              <span className="font-mono font-bold text-[11px] text-white truncate block">{ch}</span>
+                              <span className="text-[8.5px] text-slate-400 font-mono block">
+                                {grp.members.length} members • {grp.isVoiceChatEnabled !== false ? 'Voice On' : 'Voice Off'}
+                              </span>
                             </div>
-                            <span className="text-[9px] text-slate-400 font-mono">
-                              {grp.members.length} members • {grp.isVoiceChatEnabled !== false ? 'Voice Active' : 'Voice Disabled'}
-                            </span>
                           </div>
-                          {isTransmitActive && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                              Active Group
-                            </span>
-                          )}
-                        </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              setActivePttChannel(ch);
-                              setSelectedGroup(grp);
-                              onLogEvent('PttVoice', `Synchronized group voice and PTT to group "${ch}" (${grp.id}).`, 'info');
-                            }}
-                            className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
-                              isTransmitActive
-                                ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                            }`}
-                          >
-                            {isTransmitActive ? 'Synced' : 'Select'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setBackgroundListeningChannels(prev =>
-                                isListening ? prev.filter(c => c !== ch) : [...prev, ch]
-                              );
-                            }}
-                            className={`px-2 py-1 rounded text-[10px] font-semibold ${
-                              isListening
-                                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
-                                : 'bg-slate-800 text-slate-400'
-                            }`}
-                          >
-                            {isListening ? 'Listening' : 'Muted'}
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActivePttChannel(ch);
+                                setSelectedGroup(grp);
+                                onLogEvent('PttVoice', `Synced group voice & PTT to "${ch}".`, 'info');
+                              }}
+                              className={`px-2 py-0.5 rounded text-[9.5px] font-semibold transition-all ${
+                                isTransmitActive
+                                  ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                              }`}
+                            >
+                              {isTransmitActive ? 'Active' : 'Select'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBackgroundListeningChannels(prev =>
+                                  isListening ? prev.filter(c => c !== ch) : [...prev, ch]
+                                );
+                              }}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                                isListening
+                                  ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}
+                            >
+                              {isListening ? 'Hear' : 'Mute'}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {/* Large Push-To-Talk Button */}
-              <div className="flex flex-col items-center justify-center space-y-2 py-4">
+              {/* Compact Tactile Push-To-Talk Button */}
+              <div className="flex flex-col items-center justify-center space-y-1.5 py-2">
                 <button
+                  type="button"
                   onMouseDown={() => {
                     setIsPttTransmitting(true);
                     playFriendlyTone(784, 0.1);
-                    onLogEvent('PttVoice', `Transmitting live voice packet to synchronized group "${selectedGroup.name}" (${selectedGroup.id})...`, 'success');
+                    onLogEvent('PttVoice', `Transmitting live voice to "${selectedGroup.name}"...`, 'success');
                   }}
                   onMouseUp={() => {
                     setIsPttTransmitting(false);
                     playFriendlyTone(440, 0.08);
                   }}
-                  className={`w-40 h-40 rounded-full border-4 flex flex-col items-center justify-center transition-all shadow-2xl ${
+                  onTouchStart={() => {
+                    setIsPttTransmitting(true);
+                    playFriendlyTone(784, 0.1);
+                  }}
+                  onTouchEnd={() => {
+                    setIsPttTransmitting(false);
+                    playFriendlyTone(440, 0.08);
+                  }}
+                  className={`w-24 h-24 sm:w-26 sm:h-26 rounded-full border-3 flex flex-col items-center justify-center transition-all shadow-xl active:scale-95 ${
                     isPttTransmitting
-                      ? 'bg-rose-600 border-rose-400 text-white scale-95 shadow-rose-600/50'
-                      : 'bg-emerald-600 border-emerald-400 hover:bg-emerald-500 text-slate-950 shadow-emerald-600/40'
+                      ? 'bg-rose-600 border-rose-400 text-white shadow-rose-600/50 animate-pulse'
+                      : 'bg-emerald-600 border-emerald-400 hover:bg-emerald-500 text-slate-950 shadow-emerald-600/30'
                   }`}
                 >
-                  <Mic className="h-10 w-10 mb-1" />
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    {isPttTransmitting ? 'TRANSMITTING' : 'HOLD TO TALK'}
+                  <Mic className="h-6 w-6 mb-0.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    {isPttTransmitting ? 'TALKING' : 'HOLD TALK'}
                   </span>
-                  <span className="text-[10px] font-mono mt-0.5 opacity-90 font-bold">{selectedGroup.name}</span>
-                  <span className="text-[8px] font-mono opacity-70">Group Voice & PTT</span>
+                  <span className="text-[8px] font-mono mt-0.5 opacity-90 font-bold truncate max-w-[70px]">
+                    {selectedGroup.name}
+                  </span>
                 </button>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Audio sent via Opus 16kbps over local Wi-Fi / BLE mesh to {selectedGroup.name}
-                </span>
+                <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isPttTransmitting ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`} />
+                  <span>{isPttTransmitting ? 'Transmitting Opus packet...' : `Channel: ${selectedGroup.name}`}</span>
+                </div>
               </div>
             </div>
           ) : activeTab === 'map' ? (
@@ -2710,6 +2795,42 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                   <Volume2 className="h-4 w-4 text-amber-400 group-hover:scale-110 transition-transform" />
                   <span className="font-bold text-white text-[10px]">Speaker Sync</span>
                   <span className="text-[8px] text-amber-300/80 font-mono">Host & Listen</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Offline P2P & Acoustic Sharing (Nearby Share & Ultrasound Sound Wave) */}
+            <div className="p-3 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-2">
+              <span className="text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider block">
+                Offline P2P & Acoustic Sharing:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowNearbyShareModal(true);
+                  }}
+                  className="p-2.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Google Quick Share / Nearby Share P2P High-Speed File Beam"
+                >
+                  <Share2 className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">Nearby Share</span>
+                  <span className="text-[8px] text-emerald-300/80 font-mono">Wi-Fi Direct P2P</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowUltrasoundModal(true);
+                  }}
+                  className="p-2.5 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Ultrasound Near-Field Acoustic Sharing (18.5kHz-20kHz)"
+                >
+                  <Waves className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">Ultrasound Share</span>
+                  <span className="text-[8px] text-cyan-300/80 font-mono">18.5kHz Sound Wave</span>
                 </button>
               </div>
             </div>
@@ -3470,6 +3591,8 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
           else if (featId === 'feat-disguise') setIsAppDisguised(true);
           else if (featId === 'feat-camo') setShowUserSearchModal(true);
           else if (featId === 'feat-superadmin') setShowMasterAdminModal(true);
+          else if (featId === 'feat-nearbyshare') setShowNearbyShareModal(true);
+          else if (featId === 'feat-ultrasound') setShowUltrasoundModal(true);
           else setShowOtherFeaturesModal(true);
           onLogEvent('OmniSearch', `Launched tool: ${featId}`, 'success');
         }}
@@ -3657,32 +3780,205 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         </div>
       )}
 
-      {/* ULTRASOUND ACOUSTIC MODAL */}
+      {/* ULTRASOUND ACOUSTIC TRANSCEIVER MODAL */}
       {showUltrasoundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-sm rounded-xl border border-emerald-500/40 bg-slate-900 p-4 shadow-2xl space-y-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 animate-in fade-in select-none">
+          <div className="w-full max-w-sm rounded-2xl border border-cyan-500/50 bg-slate-900 p-4 shadow-2xl space-y-3 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-2 text-emerald-400">
-                <Waves className="h-4 w-4" />
-                <h3 className="text-sm font-bold text-white">Ultrasound Sound Wave Sharing</h3>
+              <div className="flex items-center gap-2 text-cyan-400">
+                <div className="h-7 w-7 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                  <Waves className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Ultrasound Acoustic Share</h3>
+                  <span className="text-[9px] font-mono text-cyan-300">18.2 kHz - 20.2 kHz Inaudible Sound Waves</span>
+                </div>
               </div>
-              <button onClick={() => setShowUltrasoundModal(false)} className="text-slate-400 hover:text-white">
+              <button
+                onClick={() => {
+                  setUltrasoundState('IDLE');
+                  setShowUltrasoundModal(false);
+                }}
+                className="text-slate-400 hover:text-white"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Transmit contacts & keys via inaudible sound waves (18.5kHz-20kHz) using phone speaker & microphone—zero external hardware!
-            </p>
+            {/* Mode Switcher: Transmitter vs Receiver */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setUltrasoundState('IDLE')}
+                className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  ultrasoundState !== 'LISTENING'
+                    ? 'bg-cyan-600 text-slate-950 shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Volume2 className="h-3.5 w-3.5" />
+                <span>Emit Speaker</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleListenUltrasound}
+                className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  ultrasoundState === 'LISTENING'
+                    ? 'bg-cyan-600 text-slate-950 shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Mic className="h-3.5 w-3.5" />
+                <span>Listen Mic</span>
+              </button>
+            </div>
 
-            <button
-              onClick={handleTransmitUltrasound}
-              disabled={ultrasoundState === 'TRANSMITTING'}
-              className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Waves className="h-4 w-4" />
-              <span>{ultrasoundState === 'TRANSMITTING' ? 'Beaming Ultrasound...' : 'Emit Ultrasound Wave'}</span>
-            </button>
+            {/* Waveform Animation Visualizer */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col items-center justify-center space-y-2 text-center">
+              <div className="relative flex items-center justify-center h-16 w-16">
+                <div className={`absolute inset-0 rounded-full border border-cyan-500/40 ${ultrasoundState === 'TRANSMITTING' || ultrasoundState === 'LISTENING' ? 'animate-ping' : ''}`} />
+                <div className={`h-12 w-12 rounded-full flex items-center justify-center border shadow-lg ${
+                  ultrasoundState === 'TRANSMITTING'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-300 animate-pulse'
+                    : ultrasoundState === 'LISTENING'
+                    ? 'bg-amber-500 text-slate-950 border-amber-300 animate-pulse'
+                    : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                }`}>
+                  <Waves className="h-6 w-6" />
+                </div>
+              </div>
+
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-white block">
+                  {ultrasoundState === 'TRANSMITTING'
+                    ? 'Beaming Ultrasonic Sound Wave...'
+                    : ultrasoundState === 'LISTENING'
+                    ? 'Microphone Listening for Ultrasonic Chirp...'
+                    : ultrasoundState === 'SUCCESS'
+                    ? 'Acoustic Transmission Verified'
+                    : 'Near-Field Acoustic Link Ready'}
+                </span>
+                <span className="text-[9.5px] font-mono text-cyan-400">
+                  FSK Modulation • 40ms/symbol • CRC-16 Validated
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Payload Presets */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wide block">
+                Quick Acoustic Presets:
+              </span>
+              <div className="grid grid-cols-3 gap-1 text-[9.5px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setUltrasoundPayload(`${identityHandle}:LINK`)}
+                  className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-200 text-center truncate"
+                >
+                  👤 Contact Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUltrasoundPayload('X25519:PUB:99a8b1c4e2')}
+                  className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-200 text-center truncate"
+                >
+                  🔑 E2EE Master Key
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUltrasoundPayload('SOS:GAS_CORDON_AVOID')}
+                  className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-200 text-center truncate"
+                >
+                  ⚠️ SOS Alert
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Payload Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono text-slate-400">
+                Payload To Transmit:
+              </label>
+              <input
+                type="text"
+                value={ultrasoundPayload}
+                onChange={(e) => setUltrasoundPayload(e.target.value)}
+                placeholder="Type text to transmit ultrasonically..."
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-cyan-200 font-mono focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            {/* Decoded Result Box */}
+            {ultrasoundDecoded && (
+              <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/50 space-y-1.5 animate-in fade-in">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-bold text-cyan-300 font-mono flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-cyan-400" /> Decoded Acoustic Payload:
+                  </span>
+                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-cyan-900 text-cyan-200">
+                    CRC Valid
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-black/60 border border-cyan-500/30 text-xs font-mono text-white break-all">
+                  {ultrasoundDecoded}
+                </div>
+                <div className="flex gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChatText(prev => (prev ? `${prev} [Ultrasound: ${ultrasoundDecoded}]` : ultrasoundDecoded));
+                      setShowUltrasoundModal(false);
+                      onLogEvent('UltrasoundAcoustic', `Pasted decoded payload "${ultrasoundDecoded}" into chat draft.`, 'success');
+                    }}
+                    className="flex-1 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-[10px] flex items-center justify-center gap-1"
+                  >
+                    <span>Insert Into Chat Draft</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ultrasoundDecoded);
+                      onLogEvent('UltrasoundAcoustic', 'Copied decoded payload to clipboard.', 'info');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px]"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Emit Action Button */}
+            <div className="pt-1 flex gap-2">
+              <button
+                type="button"
+                onClick={handleTransmitUltrasound}
+                disabled={ultrasoundState === 'TRANSMITTING'}
+                className="flex-1 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-slate-950 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg"
+              >
+                <Waves className="h-4 w-4" />
+                <span>{ultrasoundState === 'TRANSMITTING' ? 'Emitting Ultrasonic Chirps...' : 'Emit Ultrasonic Wave'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleListenUltrasound}
+                disabled={ultrasoundState === 'LISTENING'}
+                className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 font-bold text-xs transition-all flex items-center gap-1"
+                title="Listen for nearby acoustic chirps via mic"
+              >
+                <Mic className="h-4 w-4" />
+                <span>Listen</span>
+              </button>
+            </div>
+
+            {/* Acoustic Frequency Telemetry */}
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[9px] font-mono text-slate-400">
+              <span>Preamble: 18.2kHz</span>
+              <span>Bit 0: 18.8kHz</span>
+              <span>Bit 1: 19.6kHz</span>
+              <span>Stop: 20.2kHz</span>
+            </div>
           </div>
         </div>
       )}

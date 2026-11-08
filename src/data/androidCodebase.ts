@@ -2073,6 +2073,23 @@ fun AetherMeshAppNavigation(adMobManager: AdMobHybridManager) {
 `
   },
   {
+    id: 'root-build-gradle',
+    filename: 'build.gradle.kts',
+    path: 'build.gradle.kts',
+    module: 'Configuration & Build System (Root)',
+    language: 'groovy',
+    summary: 'Root project build.gradle.kts defining Gradle plugin versions with apply false to avoid duplicate plugin extension registration collisions.',
+    tags: ['Root Gradle', 'Plugin Versions', 'Kotlin 2.0.21', 'AGP 8.7.2'],
+    code: `// Top-level build file where you add configuration options common to all sub-projects/modules.
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.ksp) apply false
+}
+`
+  },
+  {
     id: 'build-gradle',
     filename: 'build.gradle.kts',
     path: 'app/build.gradle.kts',
@@ -2080,7 +2097,9 @@ fun AetherMeshAppNavigation(adMobManager: AdMobHybridManager) {
     language: 'groovy',
     summary: 'Gradle build configuration specifying Jetpack Compose compiler, Google Play Services Ads (AdMob), Biometric, BouncyCastle crypto, SQLCipher Room DB, Ktor client, and AndroidX Security dependencies.',
     tags: ['Gradle', 'Dependencies', 'AdMob SDK', 'Biometric', 'SQLCipher', 'BouncyCastle'],
-    code: `plugins {
+    code: `// In app/build.gradle.kts, DO NOT declare version numbers here if already declared in root build.gradle.kts or version catalog!
+// Specifying versions in submodules causes: "Cannot add extension with name 'kotlin', as there is an extension already registered"
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)

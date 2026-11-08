@@ -213,6 +213,8 @@ const DEFAULT_SOCIAL_ITEMS: SearchableSocialItem[] = [
 ];
 
 const DEFAULT_FEATURES: SearchableFeatureItem[] = [
+  { id: 'feat-nearbyshare', name: 'Nearby Share (Google Quick Share P2P)', category: 'Sharing', description: 'Fast offline peer-to-peer file, APK, photo & map sharing via Wi-Fi Direct and QR code', iconName: 'radio' },
+  { id: 'feat-ultrasound', name: 'Ultrasound Sound Wave Sharing (18.5kHz-20kHz)', category: 'Acoustic', description: 'Transmit contact tokens and keys via inaudible near-field sound waves using phone mic & speaker', iconName: 'radio' },
   { id: 'feat-usb', name: 'USB OTG Serial Hardware Bridge', category: 'Hardware', description: 'Auto-detect CH340, CP2102, FTDI LoRa modules & packets', iconName: 'usb' },
   { id: 'feat-map', name: 'Offline Satellite View Map', category: 'Navigation', description: 'Pre-cached high-resolution aerial imagery with RF heat waves', iconName: 'map' },
   { id: 'feat-radio', name: 'Speaker Acoustic Radio', category: 'Audio', description: 'Software acoustic ultrasound transceiver without extra hardware', iconName: 'radio' },
