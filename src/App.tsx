@@ -158,12 +158,14 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 overflow-hidden flex flex-col">
         {activeMainTab === 'simulator' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1">
-            {/* Phone Simulator Frame (5 cols on large screens) */}
-            <div className="lg:col-span-5 flex justify-center">
-              <PhoneSimulator
-                onLogEvent={addLog}
-                onSelectCodeFile={handleSelectCodeFileFromPhone}
-              />
+            {/* Phone Simulator Frame (Auto-fit responsive, max-w capped) */}
+            <div className="lg:col-span-5 flex justify-center w-full">
+              <div className="w-full max-w-[420px] sm:max-w-[430px] h-[840px] max-h-[calc(100vh-5rem)] min-h-[580px] flex flex-col">
+                <PhoneSimulator
+                  onLogEvent={addLog}
+                  onSelectCodeFile={handleSelectCodeFileFromPhone}
+                />
+              </div>
             </div>
 
             {/* Accompanying Live Inspector & Class Highlights (7 cols) */}

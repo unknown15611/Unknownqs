@@ -599,10 +599,6 @@ export const OfflineSatelliteMapView: React.FC<OfflineSatelliteMapViewProps> = (
 
         {/* Quick Filter Category Chips (Horizontal Scrollable) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pointer-events-auto px-0.5">
-          <div className="px-2.5 py-1 rounded-full bg-slate-950/90 border border-emerald-500/40 text-[9px] font-mono text-emerald-400 flex items-center gap-1 shrink-0 shadow-md">
-            <ShieldCheck className="h-3 w-3 text-emerald-400" />
-            <span>OPSEC: Fixed Relays & Repeaters Removed (Stealth Swarm Heat Wave Active)</span>
-          </div>
           {[
             { id: 'ALL', label: 'All Aid', icon: <MapPin className="h-3 w-3" /> },
             { id: 'WATER_AID', label: '💧 Water Aid', icon: <Droplets className="h-3 w-3 text-sky-400" /> },

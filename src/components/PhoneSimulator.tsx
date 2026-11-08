@@ -14,6 +14,7 @@ import {
   Wifi,
   WifiOff,
   Battery,
+  Shield,
   ShieldCheck,
   ShieldAlert,
   Send,
@@ -164,12 +165,32 @@ import { NearbyDiscoveryModal } from './NearbyDiscoveryModal';
 import { QrCodeManagerModal } from './QrCodeManagerModal';
 import { ConnectionAssistantModal } from './ConnectionAssistantModal';
 import { SuperAdminConsoleModal } from './SuperAdminConsoleModal';
+import { AndroidPermissionModal } from './AndroidPermissionModal';
+import { isStoragePermissionGranted } from '../core/storagePermissions';
+import { SpeakerSyncModal } from './SpeakerSyncModal';
 import {
   rssiToSignalPercentage,
   getSignalQuality,
   shouldEnforceLockdownForCity,
   getUrduLockdownWarning
 } from '../core/securityAndLockdown';
+import {
+  getCityCamouflageState,
+  activateCityCamouflage,
+  deactivateCityCamouflage,
+  CityCamouflageState
+} from '../core/cityCamouflage';
+import {
+  isPeerQuarantined,
+  shouldDropPacketFromPeer,
+  getQuarantinedPeers,
+  autoBlockPeer,
+  unblockPeer,
+  QuarantinedPeer
+} from '../core/meshIntrusionBlocker';
+import { APP_LOGOS, getDisguiseLogo } from '../assets/appLogos';
+
+
 
 interface PhoneSimulatorProps {
   onLogEvent: (module: string, message: string, level?: 'info' | 'warn' | 'error' | 'success') => void;
@@ -261,6 +282,30 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
   const [appliedPatches, setAppliedPatches] = useState<string[]>(['patch-frequency-hopping-v2.4', 'patch-downpour-model-v1.3']);
   const [externalSharedToSocial, setExternalSharedToSocial] = useState<{ content: string; mediaType?: 'VIDEO' | 'IMAGE'; mediaTitle?: string } | null>(null);
 
+  // Multi-Device Acoustic Speaker Sync & Host Option
+  const [showSpeakerSyncModal, setShowSpeakerSyncModal] = useState(false);
+
+  // City Camouflage & Urban Stealth State
+  const [cityCamoState, setCityCamoState] = useState<CityCamouflageState>(getCityCamouflageState());
+
+  // Mesh Intrusion & Auto-Block State
+  const [quarantinedPeers, setQuarantinedPeers] = useState<QuarantinedPeer[]>(getQuarantinedPeers());
+  const [showChatAutoBlockMenu, setShowChatAutoBlockMenu] = useState(false);
+
+
+  // Android Runtime Storage Permission Request Handler
+  const [showStoragePermissionModal, setShowStoragePermissionModal] = useState(false);
+  const [pendingFilePickerAction, setPendingFilePickerAction] = useState<(() => void) | null>(null);
+
+  const executeWithStoragePermission = (action: () => void) => {
+    if (isStoragePermissionGranted()) {
+      action();
+    } else {
+      setPendingFilePickerAction(() => action);
+      setShowStoragePermissionModal(true);
+    }
+  };
+
   // City-Targeted Security, Security PIN Changing & Stealth Disguise System
   const [appSecurityPin, setAppSecurityPin] = useState('1234');
   const [showPinChangeModal, setShowPinChangeModal] = useState(false);
@@ -269,9 +314,10 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
   const [confirmPinCandidate, setConfirmPinCandidate] = useState('');
   const [pinChangeMsg, setPinChangeMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
-  // App Disguise Mode (CALCULATOR or NOTEPAD)
+  // App Disguise Mode (CALCULATOR, NOTEPAD, or BATTERY_HEALTH)
   const [isAppDisguised, setIsAppDisguised] = useState(false);
-  const [disguiseStyle, setDisguiseStyle] = useState<'CALCULATOR' | 'NOTEPAD'>('CALCULATOR');
+  const [disguiseStyle, setDisguiseStyle] = useState<'CALCULATOR' | 'NOTEPAD' | 'BATTERY_HEALTH'>('CALCULATOR');
+
   
   // Real Working Calculator Engine for Disguise
   const [calcDisplay, setCalcDisplay] = useState('0');
@@ -1015,9 +1061,9 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
+    <div className="w-full max-w-[420px] sm:max-w-[430px] mx-auto flex flex-col h-full bg-slate-950 text-slate-100 select-none overflow-hidden font-sans rounded-[32px] sm:rounded-[36px] border-[5px] sm:border-[6px] border-slate-800 shadow-2xl">
       {/* PHONE FRAME SHELL */}
-      <div className="relative flex flex-col h-full bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden">
+      <div className="relative flex flex-col h-full bg-slate-950 overflow-hidden">
         
         {/* 1. AUTHENTIC SLIM ANDROID STATUS BAR: Time, Speed, VoLTE, 4G/3G Cellular, Wi-Fi, Battery */}
         <div className="px-2.5 py-0.5 bg-slate-950 border-b border-slate-900/60 flex items-center justify-between text-[9px] text-slate-400 font-mono z-30 leading-none">
@@ -1058,9 +1104,11 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             className="flex items-center gap-1.5 text-left hover:opacity-85 transition-opacity"
             title="Click to view hardware identity or switch node"
           >
-            <div className="h-5 w-5 rounded-full flex items-center justify-center font-bold text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-mono shadow-sm">
-              {identityHandle.slice(0, 2).toUpperCase()}
-            </div>
+            <img
+              src={cityCamoState.isActive ? getDisguiseLogo(cityCamoState.uiDisguiseMode) : APP_LOGOS.mainApp}
+              alt="Logo"
+              className="h-5 w-5 rounded-md object-cover border border-emerald-500/50 shadow-sm shrink-0"
+            />
             <div className="flex items-center gap-1">
               <span className="text-[11px] font-bold text-white font-mono leading-none">{identityHandle}</span>
               {isSuperAdmin && (
@@ -1074,8 +1122,23 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             </div>
           </button>
 
-          {/* Right: Update, Micro Update, Features & Combined Radar/Search/QR */}
-          <div className="flex items-center gap-1 text-slate-400 font-mono text-[9px]">
+          {/* Right: Admin (if Super Admin), Camouflage Badge & Combined Radar/Search/QR */}
+          <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[9px]">
+            {cityCamoState.isActive && (
+              <button
+                onClick={() => setShowUserSearchModal(true)}
+                title={`City Camouflage Active: ${cityCamoState.rfStealthName}`}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/60 font-bold text-[8px] animate-pulse"
+              >
+                <img
+                  src={getDisguiseLogo(cityCamoState.uiDisguiseMode)}
+                  alt="Camo"
+                  className="h-2.5 w-2.5 rounded-sm object-cover"
+                />
+                <span>Camo</span>
+              </button>
+            )}
+
             {isSuperAdmin && (
               <button
                 onClick={() => setShowMasterAdminModal(true)}
@@ -1087,33 +1150,9 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               </button>
             )}
             <button
-              onClick={() => setShowUpdateModal(true)}
-              title="Full Mesh OTA Base APK Update"
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 text-[8px] font-bold"
-            >
-              <DownloadCloud className="h-2.5 w-2.5 text-emerald-400" />
-              <span>Update</span>
-            </button>
-            <button
-              onClick={() => setShowMicroUpdateModal(true)}
-              title="Micro Updates & Delta Hot-Patches (Instant memory patches)"
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-cyan-300 border border-cyan-500/30 text-[8px] font-bold"
-            >
-              <Zap className="h-2.5 w-2.5 text-cyan-400" />
-              <span>Micro</span>
-            </button>
-            <button
-              onClick={() => setShowOtherFeaturesModal(true)}
-              title="Features Hub & Modular Tools"
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-500/30 text-[8px] font-bold"
-            >
-              <LayoutGrid className="h-2.5 w-2.5 text-emerald-400" />
-              <span>Features</span>
-            </button>
-            <button
               onClick={() => setShowUserSearchModal(true)}
               title="Omni Discovery Radar, Search & QR Center"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-emerald-500/40 shadow-sm font-bold text-[8px]"
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-emerald-500/40 shadow-sm font-bold text-[8.5px]"
             >
               <Radar className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
               <Search className="h-2.5 w-2.5 text-emerald-400" />
@@ -1121,6 +1160,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               <span>Radar & Search</span>
             </button>
           </div>
+
         </div>
 
         {/* Active Global Emergency Broadcast Banner */}
@@ -1326,6 +1366,33 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               {/* Chat Thread Header: Groups */}
               {chatType === 'groups' && (
                 <div className="space-y-2">
+                  {/* Group Channel Switcher Strip (Direct Group Voice & PTT Sync) */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10px] shrink-0">
+                    {groups.map((grp) => {
+                      const isSelected = selectedGroup.id === grp.id;
+                      return (
+                        <button
+                          key={grp.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedGroup(grp);
+                            setActivePttChannel(grp.name);
+                            onLogEvent('GroupSync', `Switched group voice and PTT to group "${grp.name}" (${grp.id}).`, 'info');
+                          }}
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shrink-0 transition-all border ${
+                            isSelected
+                              ? 'bg-emerald-600 text-slate-950 border-emerald-400 shadow-sm'
+                              : 'bg-[#04281e] text-emerald-300 hover:bg-[#063f2f] border-emerald-500/40'
+                          }`}
+                        >
+                          <Users className="h-3 w-3" />
+                          <span>{grp.name}</span>
+                          <span className="text-[8.5px] opacity-75 font-mono">({grp.members.length})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <div className="p-2.5 rounded-lg bg-[#031d16] border border-[#063f2f] flex items-center justify-between">
                     <div>
                       <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -1468,66 +1535,181 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               )}
 
               {/* Chat Thread Header: Direct Peer Chat */}
-              {chatType === 'direct' && directChatTarget === 'peer' && (
-                <div
-                  className="p-2 rounded-lg border bg-[#031d16] border-[#063f2f] flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-full bg-[#042a20] border border-[#095741] flex items-center justify-center text-xs font-bold text-emerald-300 font-mono">
-                      {selectedPeer.handle.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="text-xs font-bold text-white font-mono">{selectedPeer.handle}</h4>
-                        {privateNicknames[selectedPeer.handle] && (
-                          <span className="text-[9px] px-1.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                            {privateNicknames[selectedPeer.handle]}
-                          </span>
-                        )}
+              {chatType === 'direct' && directChatTarget === 'peer' && (() => {
+                const isDirectPeerBlocked = isPeerQuarantined(selectedPeer.handle);
+                return (
+                  <div className="space-y-1.5">
+                    <div
+                      className={`p-2 rounded-lg border flex items-center justify-between transition-all ${
+                        isDirectPeerBlocked
+                          ? 'bg-red-950/40 border-red-500/60'
+                          : 'bg-[#031d16] border-[#063f2f]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`h-7 w-7 rounded-full border flex items-center justify-center text-xs font-bold font-mono ${
+                          isDirectPeerBlocked
+                            ? 'bg-red-950 text-red-400 border-red-500/60'
+                            : 'bg-[#042a20] border-[#095741] text-emerald-300'
+                        }`}>
+                          {selectedPeer.handle.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className={`text-xs font-bold font-mono ${isDirectPeerBlocked ? 'text-red-300 line-through' : 'text-white'}`}>
+                              {selectedPeer.handle}
+                            </h4>
+                            {isDirectPeerBlocked && (
+                              <span className="text-[7.5px] px-1.5 py-0.2 rounded bg-red-500 text-white font-bold animate-pulse">
+                                AUTO-BLOCKED
+                              </span>
+                            )}
+                            {privateNicknames[selectedPeer.handle] && (
+                              <span className="text-[9px] px-1.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                                {privateNicknames[selectedPeer.handle]}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-emerald-400/80">
+                            {getEffectivePeerDisplayName(selectedPeer.handle, selectedPeer.handle, privateNicknames)}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {isDirectPeerBlocked ? (
+                              <span className="text-[8.5px] text-red-400 font-semibold flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                                Quarantined • Radio packets dropped by shield
+                              </span>
+                            ) : selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false ? (
+                              <span className="text-[8.5px] text-amber-300 font-semibold flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                Offline • Store-and-Forward Active
+                              </span>
+                            ) : (
+                              <span className="text-[8.5px] text-emerald-300 font-medium flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                                Reachable • Signal: {rssiToSignalPercentage(selectedPeer.rssiDbm)}% 📶
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-emerald-400/80">
-                        {getEffectivePeerDisplayName(selectedPeer.handle, selectedPeer.handle, privateNicknames)}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {selectedPeer.status === 'OFFLINE' || selectedPeer.isReachable === false ? (
-                          <span className="text-[8.5px] text-amber-300 font-semibold flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                            Offline • Store-and-Forward Active
-                          </span>
-                        ) : (
-                          <span className="text-[8.5px] text-emerald-300 font-medium flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-                            Reachable • Signal: {rssiToSignalPercentage(selectedPeer.rssiDbm)}% 📶
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTempNicknameValue(privateNicknames[selectedPeer.handle] || '');
-                        setShowNicknameModal(true);
-                      }}
-                      title="Set Private Local Nickname"
-                      className="p-1 rounded bg-[#042a20] hover:bg-[#063f2f] text-emerald-300 border border-[#095741] text-[10px]"
-                    >
-                      <Tag className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowUserSearchModal(true);
-                      }}
-                      className="px-2 py-0.5 rounded bg-[#042a20] hover:bg-[#063f2f] text-[10px] text-emerald-300 border border-[#095741] font-semibold"
-                    >
-                      Switch
-                    </button>
+                      <div className="flex items-center gap-1">
+                        {isDirectPeerBlocked ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unblockPeer(selectedPeer.handle);
+                              setQuarantinedPeers(getQuarantinedPeers());
+                              onLogEvent('MeshShield', `Manually unblocked @${selectedPeer.handle}`, 'info');
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-red-300 border border-red-500/40 text-[9.5px] font-bold"
+                          >
+                            Unblock
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowChatAutoBlockMenu(!showChatAutoBlockMenu);
+                            }}
+                            title="Auto-Block: Report Jamming, Blackhole or Virus"
+                            className="p-1 rounded bg-[#042a20] hover:bg-red-950/80 text-emerald-300 hover:text-red-300 border border-[#095741] text-[10px]"
+                          >
+                            <ShieldAlert className="h-3 w-3" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTempNicknameValue(privateNicknames[selectedPeer.handle] || '');
+                            setShowNicknameModal(true);
+                          }}
+                          title="Set Private Local Nickname"
+                          className="p-1 rounded bg-[#042a20] hover:bg-[#063f2f] text-emerald-300 border border-[#095741] text-[10px]"
+                        >
+                          <Tag className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowUserSearchModal(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-[#042a20] hover:bg-[#063f2f] text-[10px] text-emerald-300 border border-[#095741] font-semibold"
+                        >
+                          Switch
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline Auto-Block Selection Menu in Chat */}
+                    {showChatAutoBlockMenu && !isDirectPeerBlocked && (
+                      <div className="p-2 rounded-lg bg-red-950/80 border border-red-500/50 space-y-1.5 text-xs animate-in fade-in">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-red-300 font-mono">
+                          <span>⚡ AUTO-BLOCK @{selectedPeer.handle}:</span>
+                          <button onClick={() => setShowChatAutoBlockMenu(false)} className="text-red-400 hover:text-white px-1">✕</button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1">
+                          <button
+                            onClick={() => {
+                              autoBlockPeer(selectedPeer.handle, 'JAMMING', 'Node exceeded packet flooding threshold in chat.');
+                              setQuarantinedPeers(getQuarantinedPeers());
+                              setShowChatAutoBlockMenu(false);
+                              onLogEvent('MeshShield', `Auto-blocked @${selectedPeer.handle} for RF jamming.`, 'warn');
+                            }}
+                            className="py-1 px-1 rounded bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-500/40 text-[9px] font-bold"
+                          >
+                            🚨 Jamming
+                          </button>
+                          <button
+                            onClick={() => {
+                              autoBlockPeer(selectedPeer.handle, 'BLOCKING', 'Node confirmed blackholing packets in chat.');
+                              setQuarantinedPeers(getQuarantinedPeers());
+                              setShowChatAutoBlockMenu(false);
+                              onLogEvent('MeshShield', `Auto-blocked @${selectedPeer.handle} for route blocking.`, 'warn');
+                            }}
+                            className="py-1 px-1 rounded bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-500/40 text-[9px] font-bold"
+                          >
+                            🛑 Blackhole
+                          </button>
+                          <button
+                            onClick={() => {
+                              autoBlockPeer(selectedPeer.handle, 'VIRUS', 'Detected transmission of corrupted virus/malware payload.');
+                              setQuarantinedPeers(getQuarantinedPeers());
+                              setShowChatAutoBlockMenu(false);
+                              onLogEvent('MeshShield', `Auto-blocked @${selectedPeer.handle} for virus distribution.`, 'warn');
+                            }}
+                            className="py-1 px-1 rounded bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-500/40 text-[9px] font-bold"
+                          >
+                            ☣️ Virus APK
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Blocked Peer Active Warning Bar */}
+                    {isDirectPeerBlocked && (
+                      <div className="p-2 rounded-lg bg-red-950/80 border border-red-500/60 text-red-200 text-[10px] font-mono flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0 animate-pulse" />
+                          <span>Radio packets from @{selectedPeer.handle} are filtered by intrusion shield.</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            unblockPeer(selectedPeer.handle);
+                            setQuarantinedPeers(getQuarantinedPeers());
+                            onLogEvent('MeshShield', `Unblocked peer @${selectedPeer.handle}`, 'info');
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-800 text-red-300 border border-red-500/40 font-bold text-[8.5px]"
+                        >
+                          Unblock
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
 
               {/* Location Auto-Translate Strip */}
               {chatType === 'direct' && directChatTarget === 'peer' && (
@@ -1567,7 +1749,18 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                   ))
                 ) : (
                   dtnPackets
-                    .filter(pkt => chatType === 'groups' ? pkt.groupId === selectedGroup.id : !pkt.groupId)
+                    .filter(pkt => {
+                      if (chatType === 'groups') {
+                        if (pkt.groupId !== selectedGroup.id) return false;
+                      } else {
+                        if (pkt.groupId) return false;
+                      }
+                      if (pkt.source !== identityHandle && isPeerQuarantined(pkt.source)) {
+                        return false;
+                      }
+                      return true;
+                    })
+
                     .map((pkt, msgIdx) => {
                       const isSelf = pkt.source === identityHandle;
                       const hasTranslation = translatedMessages[pkt.id];
@@ -1772,7 +1965,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                 {/* PROMINENT FILE / VIDEO UPLOAD BUTTON */}
                 <button
                   type="button"
-                  onClick={() => setShowFileUploadModal(true)}
+                  onClick={() => executeWithStoragePermission(() => setShowFileUploadModal(true))}
                   className="p-2 rounded-lg bg-[#042a20] hover:bg-[#063f2f] text-emerald-300 border border-[#095741] transition-colors"
                   title="Upload Video, Photo, or File"
                 >
@@ -1952,17 +2145,18 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                   Listen to multiple group channels simultaneously in background. Hold PTT button to transmit to your active channel.
                 </p>
 
-                {/* Multi-Channel Listening Toggles */}
+                {/* Multi-Channel Listening Toggles - Synchronized with Mesh Groups */}
                 <div className="space-y-1.5 pt-1">
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">
-                    Background Listening Channels:
+                    Group Mesh Channels (Group Voice & PTT Synchronized):
                   </span>
-                  {['#lahore-relief', '#protest-safety', '#campus-quad'].map((ch) => {
+                  {groups.map((grp) => {
+                    const ch = grp.name;
                     const isListening = backgroundListeningChannels.includes(ch);
-                    const isTransmitActive = activePttChannel === ch;
+                    const isTransmitActive = activePttChannel === ch || selectedGroup.id === grp.id;
                     return (
                       <div
-                        key={ch}
+                        key={grp.id}
                         className={`p-2 rounded-lg border text-xs flex items-center justify-between transition-colors ${
                           isTransmitActive
                             ? 'bg-emerald-950/40 border-emerald-500 text-white'
@@ -1971,10 +2165,18 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                       >
                         <div className="flex items-center gap-2">
                           <Volume2 className={`h-3.5 w-3.5 ${isListening ? 'text-emerald-400' : 'text-slate-500'}`} />
-                          <span className="font-mono font-bold">{ch}</span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-white">{ch}</span>
+                              <span className="text-[9px] font-mono text-emerald-400">({grp.id})</span>
+                            </div>
+                            <span className="text-[9px] text-slate-400 font-mono">
+                              {grp.members.length} members • {grp.isVoiceChatEnabled !== false ? 'Voice Active' : 'Voice Disabled'}
+                            </span>
+                          </div>
                           {isTransmitActive && (
-                            <span className="text-[9px] px-1.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
-                              Transmit Target
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                              Active Group
                             </span>
                           )}
                         </div>
@@ -1983,11 +2185,16 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                           <button
                             onClick={() => {
                               setActivePttChannel(ch);
-                              onLogEvent('PttVoice', `Active transmit target set to ${ch}`, 'info');
+                              setSelectedGroup(grp);
+                              onLogEvent('PttVoice', `Synchronized group voice and PTT to group "${ch}" (${grp.id}).`, 'info');
                             }}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-200 font-semibold"
+                            className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
+                              isTransmitActive
+                                ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                            }`}
                           >
-                            Set Target
+                            {isTransmitActive ? 'Synced' : 'Select'}
                           </button>
                           <button
                             onClick={() => {
@@ -1995,7 +2202,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                                 isListening ? prev.filter(c => c !== ch) : [...prev, ch]
                               );
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            className={`px-2 py-1 rounded text-[10px] font-semibold ${
                               isListening
                                 ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
                                 : 'bg-slate-800 text-slate-400'
@@ -2016,7 +2223,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                   onMouseDown={() => {
                     setIsPttTransmitting(true);
                     playFriendlyTone(784, 0.1);
-                    onLogEvent('PttVoice', `Transmitting live voice packet to ${activePttChannel}...`, 'success');
+                    onLogEvent('PttVoice', `Transmitting live voice packet to synchronized group "${selectedGroup.name}" (${selectedGroup.id})...`, 'success');
                   }}
                   onMouseUp={() => {
                     setIsPttTransmitting(false);
@@ -2032,10 +2239,11 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
                   <span className="text-xs font-black uppercase tracking-wider">
                     {isPttTransmitting ? 'TRANSMITTING' : 'HOLD TO TALK'}
                   </span>
-                  <span className="text-[10px] font-mono mt-0.5 opacity-80">{activePttChannel}</span>
+                  <span className="text-[10px] font-mono mt-0.5 opacity-90 font-bold">{selectedGroup.name}</span>
+                  <span className="text-[8px] font-mono opacity-70">Group Voice & PTT</span>
                 </button>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  Audio sent via Opus 16kbps over local Wi-Fi / BLE mesh
+                  Audio sent via Opus 16kbps over local Wi-Fi / BLE mesh to {selectedGroup.name}
                 </span>
               </div>
             </div>
@@ -2456,6 +2664,95 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
               All settings, hardware bridges, and emergency tools unified under the 3 Books Library.
             </p>
 
+            {/* System Updates, Hot-Patches & Multi-Device Speaker Sync (Moved from Top Bar to Library) */}
+            <div className="p-3 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-2">
+              <span className="text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider block">
+                System Updates & Acoustics:
+              </span>
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowUpdateModal(true);
+                  }}
+                  className="p-2 rounded-lg bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Full Mesh OTA Base APK Update"
+                >
+                  <DownloadCloud className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">OTA Update</span>
+                  <span className="text-[8px] text-emerald-300/80 font-mono">v3.5.0 Base</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowMicroUpdateModal(true);
+                  }}
+                  className="p-2 rounded-lg bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Micro Updates & Delta Hot-Patches (Instant memory patches)"
+                >
+                  <Zap className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">Micro Patch</span>
+                  <span className="text-[8px] text-cyan-300/80 font-mono">15KB-85KB</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowSpeakerSyncModal(true);
+                  }}
+                  className="p-2 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Multi-Phone Synchronized Acoustic Megaphone Broadcast"
+                >
+                  <Volume2 className="h-4 w-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">Speaker Sync</span>
+                  <span className="text-[8px] text-amber-300/80 font-mono">Host & Listen</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Security, Auto-Block Shield & Urban Camouflage */}
+            <div className="p-3 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-2">
+              <span className="text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider block">
+                Security, Auto-Block & Urban Camouflage:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowUserSearchModal(true);
+                  }}
+                  className="p-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Auto-Block Someone for Jamming, Route Blocking or Spreading Virus"
+                >
+                  <ShieldAlert className="h-4 w-4 text-red-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">Auto-Block Shield</span>
+                  <span className="text-[8px] text-red-300/80 font-mono">Anti-Jam / Virus IDS</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtherFeaturesModal(false);
+                    setShowUserSearchModal(true);
+                  }}
+                  className="p-2.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 flex flex-col items-center justify-center gap-1 text-center transition-all group shadow-sm"
+                  title="Search & Activate City Camouflage (Mall Road, Saddar, Blue Area)"
+                >
+                  <Shield className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold text-white text-[10px]">City Camouflage</span>
+                  <span className="text-[8px] text-emerald-300/80 font-mono">
+                    {cityCamoState.isActive ? 'Active Stealth' : 'Search & Disguise'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+
             {/* SUPER ADMIN TOOLS (EXCLUSIVE TO SUPER ADMIN qaidi156156) */}
             {isSuperAdmin ? (
               <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/70 via-slate-900 to-emerald-950/70 border-2 border-amber-500/60 shadow-lg space-y-2">
@@ -2746,7 +3043,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 type="button"
-                onClick={() => universalFileInputRef.current?.click()}
+                onClick={() => executeWithStoragePermission(() => universalFileInputRef.current?.click())}
                 className="p-3 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/50 flex flex-col items-center justify-center gap-1.5 text-center transition-colors group shadow-sm"
               >
                 <div className="h-8 w-8 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -2758,7 +3055,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
 
               <button
                 type="button"
-                onClick={() => universalFolderInputRef.current?.click()}
+                onClick={() => executeWithStoragePermission(() => universalFolderInputRef.current?.click())}
                 className="p-3 rounded-lg bg-amber-950/50 hover:bg-amber-900/50 border border-amber-500/50 flex flex-col items-center justify-center gap-1.5 text-center transition-colors group shadow-sm"
               >
                 <div className="h-8 w-8 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -3126,6 +3423,15 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
         isOpen={showUserSearchModal}
         onClose={() => setShowUserSearchModal(false)}
         currentHandle={identityHandle}
+        activeCityCamouflageState={cityCamoState}
+        onActivateCityCamouflage={(presetId) => {
+          const next = activateCityCamouflage(presetId);
+          setCityCamoState(next);
+        }}
+        onDeactivateCityCamouflage={() => {
+          const next = deactivateCityCamouflage();
+          setCityCamoState(next);
+        }}
         onOpenFullQrModal={() => setShowQrCodeModal(true)}
         onSelectPeerToChat={(handle, name) => {
           setSelectedPeer({
@@ -3162,10 +3468,12 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
           else if (featId === 'feat-notice') setActiveTab('notice');
           else if (featId === 'feat-weather') setShowWeatherModal(true);
           else if (featId === 'feat-disguise') setIsAppDisguised(true);
+          else if (featId === 'feat-camo') setShowUserSearchModal(true);
           else if (featId === 'feat-superadmin') setShowMasterAdminModal(true);
           else setShowOtherFeaturesModal(true);
           onLogEvent('OmniSearch', `Launched tool: ${featId}`, 'success');
         }}
+
         onPlayYouTube={(vid) => {
           setActiveTab('social');
           onLogEvent('OmniSearch', `Playing YouTube video: ${vid.title}`, 'info');
@@ -3778,6 +4086,31 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({ onLogEvent, onSe
           </div>
         </div>
       )}
+
+      {/* MULTI-DEVICE ACOUSTIC SPEAKER SYNC & HOST MODAL */}
+      <SpeakerSyncModal
+        isOpen={showSpeakerSyncModal}
+        onClose={() => setShowSpeakerSyncModal(false)}
+        currentHandle={identityHandle}
+        onLogEvent={onLogEvent}
+      />
+
+      {/* ANDROID RUNTIME STORAGE PERMISSION MODAL */}
+      <AndroidPermissionModal
+        isOpen={showStoragePermissionModal}
+        onClose={() => {
+          setShowStoragePermissionModal(false);
+          setPendingFilePickerAction(null);
+        }}
+        onGranted={() => {
+          setShowStoragePermissionModal(false);
+          if (pendingFilePickerAction) {
+            pendingFilePickerAction();
+            setPendingFilePickerAction(null);
+          }
+        }}
+        onLogEvent={onLogEvent}
+      />
 
       {/* USB OTG UNIVERSAL SERIAL HARDWARE BRIDGE MODAL */}
       {showUsbOtgModal && (

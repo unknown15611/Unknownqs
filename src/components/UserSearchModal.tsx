@@ -26,9 +26,34 @@ import {
   Radar,
   Volume2,
   RefreshCw,
-  Camera
+  Camera,
+  ShieldAlert,
+  Shield,
+  EyeOff,
+  Lock,
+  AlertTriangle,
+  Ban,
+  Activity
 } from 'lucide-react';
 import { rssiToSignalPercentage } from '../core/securityAndLockdown';
+import {
+  searchCityCamouflage,
+  getCityCamouflageState,
+  activateCityCamouflage,
+  deactivateCityCamouflage,
+  CityCamouflagePreset,
+  CityCamouflageState
+} from '../core/cityCamouflage';
+import {
+  isPeerQuarantined,
+  autoBlockPeer,
+  unblockPeer,
+  getQuarantinedPeers,
+  simulateMaliciousIntrusion,
+  ThreatCategory,
+  QuarantinedPeer
+} from '../core/meshIntrusionBlocker';
+import { APP_LOGOS, getDisguiseLogo } from '../assets/appLogos';
 
 export interface PeerProfile {
   handle: string;
@@ -43,6 +68,7 @@ export interface PeerProfile {
 
 export interface SearchableGroup {
   id: string;
+
   name: string;
   membersCount: number;
   isAvailable: boolean;
@@ -194,6 +220,7 @@ const DEFAULT_FEATURES: SearchableFeatureItem[] = [
   { id: 'feat-notice', name: 'Notice Board & Tactical Academy', category: 'Education', description: 'Community broadcast announcements & 100km LoRa tutorials', iconName: 'notice' },
   { id: 'feat-weather', name: 'Weather & Severe Rain Alert', category: 'Sensors', description: 'Offline rainfall rate (~35 mm / 2 hrs) & downpour warnings', iconName: 'weather' },
   { id: 'feat-disguise', name: 'Stealth Calculator & Notepad Disguise', category: 'Privacy', description: 'Disguise app behind a fully working functional calculator', iconName: 'disguise' },
+  { id: 'feat-camo', name: 'City Camouflage & Urban Stealth', category: 'OPSEC', description: 'Civilian smartwatch & printer RF beacon disguise for urban protests', iconName: 'disguise' },
   { id: 'feat-fund', name: 'Solar LoRa Hardware Fund', category: 'Community', description: '100% of native ad revenue pooled to buy repeaters', iconName: 'fund' },
   { id: 'feat-superadmin', name: 'Super Admin Master Console', category: 'Governance', description: 'Emergency broadcast, node quarantine & city lockdown (qaidi156156 only)', iconName: 'admin' }
 ];
@@ -203,6 +230,9 @@ interface UserSearchModalProps {
   onClose: () => void;
   currentHandle?: string;
   initialTab?: 'RADAR' | 'SEARCH' | 'QR';
+  activeCityCamouflageState?: CityCamouflageState;
+  onActivateCityCamouflage?: (presetId: string) => void;
+  onDeactivateCityCamouflage?: () => void;
   onSelectPeerToChat: (handle: string, displayName: string) => void;
   onSelectGroup?: (groupId: string) => void;
   onLaunchFeature?: (featureId: string) => void;
@@ -217,6 +247,9 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
   onClose,
   currentHandle = 'qaidi156156',
   initialTab = 'SEARCH',
+  activeCityCamouflageState,
+  onActivateCityCamouflage,
+  onDeactivateCityCamouflage,
   onSelectPeerToChat,
   onSelectGroup,
   onLaunchFeature,
@@ -228,7 +261,18 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
   // 3-in-1 Combined Mode: Radar Discovery | Omni Search | QR & Scanner
   const [combinedMode, setCombinedMode] = useState<'RADAR' | 'SEARCH' | 'QR'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSearchTab, setActiveSearchTab] = useState<'ALL' | 'USERS' | 'GROUPS' | 'VIDEOS' | 'FEATURES'>('ALL');
+  const [activeSearchTab, setActiveSearchTab] = useState<'ALL' | 'USERS' | 'GROUPS' | 'VIDEOS' | 'FEATURES' | 'CAMOUFLAGE'>('ALL');
+
+  // City Camouflage & Stealth State
+  const [camoState, setCamoState] = useState<CityCamouflageState>(
+    activeCityCamouflageState || getCityCamouflageState()
+  );
+
+  // Auto-Block & Quarantine State
+  const [quarantinedList, setQuarantinedList] = useState<QuarantinedPeer[]>(getQuarantinedPeers());
+  const [reportingPeerHandle, setReportingPeerHandle] = useState<string | null>(null);
+  const [showQuarantineDrawer, setShowQuarantineDrawer] = useState(false);
+  const [shieldAlertBanner, setShieldAlertBanner] = useState<string | null>(null);
 
   // QR Code on Search Hit State
   const [showQrCodeCard, setShowQrCodeCard] = useState(true);
@@ -242,6 +286,14 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
   const [isRadarScanning, setIsRadarScanning] = useState(true);
   const [radarAngle, setRadarAngle] = useState(0);
   const [pingedPeerHandle, setPingedPeerHandle] = useState<string | null>(null);
+
+  // Sync external camo state
+  useEffect(() => {
+    if (activeCityCamouflageState) {
+      setCamoState(activeCityCamouflageState);
+    }
+  }, [activeCityCamouflageState]);
+
 
   // Sync initial tab when changed externally
   useEffect(() => {
@@ -307,6 +359,57 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
     return f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q) || f.category.toLowerCase().includes(q);
   });
 
+  // Filter City Camouflage Presets
+  const filteredCamoPresets = searchCityCamouflage(searchQuery);
+  const isCamoRelatedQuery = ['cemuflage', 'camouflage', 'camo', 'stealth', 'decoy', 'disguise', 'city', 'urban', 'protest', 'lahore', 'karachi', 'islamabad', 'rawalpindi', 'peshawar', 'faisalabad', 'multan', 'quetta'].some(term => q.includes(term));
+
+  // Toggle or activate City Camouflage preset
+  const handleToggleCamoPreset = (preset: CityCamouflagePreset) => {
+    if (camoState.isActive && camoState.currentPresetId === preset.id) {
+      const next = deactivateCityCamouflage();
+      setCamoState(next);
+      onDeactivateCityCamouflage?.();
+      onLogEvent?.('CityCamouflage', `Deactivated urban camouflage for ${preset.city}`, 'info');
+    } else {
+      const next = activateCityCamouflage(preset.id);
+      setCamoState(next);
+      onActivateCityCamouflage?.(preset.id);
+      onLogEvent?.('CityCamouflage', `Activated [${preset.title}]! RF disguised as "${preset.rfStealthName}". Decoy: ${preset.uiDisguiseMode}`, 'success');
+    }
+  };
+
+  // Execute Auto-Block on Malicious Peer
+  const handleExecuteAutoBlock = (peerHandle: string, threat: ThreatCategory) => {
+    const evidenceMap: Record<ThreatCategory, string> = {
+      JAMMING: 'Node engaged in intentional RF channel jamming & high-frequency packet flooding.',
+      BLOCKING: 'Node confirmed to be blackholing transit packets and disrupting P2P mesh routes.',
+      VIRUS: 'Detected attempted broadcast of corrupted / virus-infected APK payload.'
+    };
+    autoBlockPeer(peerHandle, threat, evidenceMap[threat]);
+    setQuarantinedList(getQuarantinedPeers());
+    setReportingPeerHandle(null);
+    setShieldAlertBanner(`🛡️ Auto-Blocked @${peerHandle} [${threat}]! All packets filtered.`);
+    onLogEvent?.('MeshShield', `Auto-blocked malicious peer @${peerHandle} due to ${threat}. Radio filter active.`, 'warn');
+    setTimeout(() => setShieldAlertBanner(null), 4000);
+  };
+
+  // Manually Unblock Peer
+  const handleUnblockPeer = (peerHandle: string) => {
+    unblockPeer(peerHandle);
+    setQuarantinedList(getQuarantinedPeers());
+    onLogEvent?.('MeshShield', `Manually unblocked peer @${peerHandle}.`, 'info');
+  };
+
+  // Test simulation for Auto-Block shield
+  const handleSimulateAttack = (threat: ThreatCategory) => {
+    const sim = simulateMaliciousIntrusion(threat);
+    setQuarantinedList(getQuarantinedPeers());
+    setShieldAlertBanner(`🛡️ Intrusion Shield Auto-Blocked @${sim.quarantined.handle} [${threat}]!`);
+    onLogEvent?.('MeshShield', `[SIMULATED INTRUSION] Auto-blocked @${sim.quarantined.handle} (${threat})`, 'warn');
+    setTimeout(() => setShieldAlertBanner(null), 4000);
+  };
+
+
   // Acoustic Discovery Ping probe sound
   const handlePingPeer = (peerHandle: string) => {
     setPingedPeerHandle(peerHandle);
@@ -366,19 +469,16 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
-              {combinedMode === 'RADAR' ? (
-                <Radar className="h-4 w-4 animate-pulse" />
-              ) : combinedMode === 'QR' ? (
-                <QrCode className="h-4 w-4" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-            </div>
+            <img
+              src={APP_LOGOS.mainApp}
+              alt="App Logo"
+              className="h-8 w-8 rounded-lg object-cover border border-emerald-500/50 shadow-md shadow-emerald-950/80 shrink-0"
+            />
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <span>Discovery, Search & QR</span>
               </h3>
+
               <p className="text-[10px] text-slate-400">
                 {combinedMode === 'RADAR'
                   ? '360° Proximity Radar sweep for active mesh peers'
@@ -668,24 +768,127 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
 
             {/* Category Filter Pills */}
             <div className="flex gap-1 overflow-x-auto pb-1.5 mb-2 shrink-0 scrollbar-none text-[10px]">
-              {(['ALL', 'USERS', 'GROUPS', 'VIDEOS', 'FEATURES'] as const).map((tab) => (
+              {(['ALL', 'USERS', 'CAMOUFLAGE', 'GROUPS', 'VIDEOS', 'FEATURES'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveSearchTab(tab)}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all shrink-0 ${
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all shrink-0 flex items-center gap-1 ${
                     activeSearchTab === tab
                       ? 'bg-emerald-600 text-slate-950 font-bold shadow-sm'
                       : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
                   }`}
                 >
-                  {tab === 'ALL' ? '🌐 All' : tab === 'USERS' ? '👤 Users' : tab === 'GROUPS' ? '👥 Groups' : tab === 'VIDEOS' ? '▶ YouTube' : '⚡ Tools'}
+                  {tab === 'ALL' ? '🌐 All' : tab === 'USERS' ? '👤 Users' : tab === 'CAMOUFLAGE' ? '🛡️ City Camo' : tab === 'GROUPS' ? '👥 Groups' : tab === 'VIDEOS' ? '▶ YouTube' : '⚡ Tools'}
+                  {tab === 'CAMOUFLAGE' && camoState.isActive && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                  )}
                 </button>
               ))}
             </div>
 
-            {/* Search Results Feed (No Waitlist! Direct Message to Any User - Online or Offline) */}
+            {/* Live Shield Alert Banner */}
+            {shieldAlertBanner && (
+              <div className="mb-2 p-2 rounded-lg bg-red-950/90 border border-red-500/70 text-red-200 text-[10.5px] font-mono flex items-center justify-between shrink-0 animate-in fade-in">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0 animate-pulse" />
+                  <span>{shieldAlertBanner}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShieldAlertBanner(null)}
+                  className="text-red-400 hover:text-white text-xs px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Search Results Feed (Direct Messaging, City Camouflage, Groups, Videos) */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
-              {/* SECTION 1: USERS (Allow message to offline users directly) */}
+              
+              {/* SECTION: CITY CAMOUFLAGE (Prominent when searching camouflage, cemuflage, city names, or on CAMOUFLAGE tab) */}
+              {(activeSearchTab === 'ALL' || activeSearchTab === 'CAMOUFLAGE') && (isCamoRelatedQuery || activeSearchTab === 'CAMOUFLAGE') && filteredCamoPresets.length > 0 && (
+                <div className="space-y-2 p-2.5 rounded-xl bg-gradient-to-b from-[#022016] to-slate-950 border border-emerald-500/50 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-emerald-400 font-bold font-mono text-[10.5px] uppercase">
+                      <Shield className="h-3.5 w-3.5 animate-pulse" />
+                      <span>City Camouflage & Urban Stealth ({filteredCamoPresets.length})</span>
+                    </div>
+                    {camoState.isActive ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold">
+                        ACTIVE STEALTH
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-400">Offline civilian disguise</span>
+                    )}
+                  </div>
+                  <p className="text-[9.5px] text-slate-300 leading-snug">
+                    Masks RF beacons as civilian smartwatches/printers to evade detection at checkpoints and protest zones.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    {filteredCamoPresets.map((preset) => {
+                      const isCurrent = camoState.isActive && camoState.currentPresetId === preset.id;
+                      return (
+                        <div
+                          key={preset.id}
+                          className={`p-2 rounded-lg border transition-all ${
+                            isCurrent
+                              ? 'bg-emerald-950/70 border-emerald-400 shadow-sm'
+                              : 'bg-slate-900 border-slate-800 hover:border-emerald-500/40'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-start gap-2.5">
+                              <img
+                                src={getDisguiseLogo(preset.uiDisguiseMode)}
+                                alt={preset.uiDisguiseMode}
+                                className="h-10 w-10 rounded-xl object-cover border border-emerald-500/40 shrink-0 shadow-md mt-0.5"
+                              />
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-white text-[11px]">{preset.title}</span>
+                                  <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                                    {preset.city}
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{preset.description}</p>
+                                
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[8.5px] font-mono">
+                                  <span className="text-emerald-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                    RF Mask: <strong>{preset.rfStealthName}</strong>
+                                  </span>
+                                  <span className="text-amber-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                    Decoy: {preset.uiDisguiseMode}
+                                  </span>
+                                  <span className="text-teal-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                    {preset.antiJammingProfile}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCamoPreset(preset)}
+                              className={`shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm ${
+                                isCurrent
+                                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 ring-1 ring-emerald-300'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700'
+                              }`}
+                            >
+                              {isCurrent ? '✓ Active' : 'Activate'}
+                            </button>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 1: USERS (Allow message to offline users directly + Auto-Block for Jamming / Virus) */}
               {(activeSearchTab === 'ALL' || activeSearchTab === 'USERS') && filteredPeers.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-wider">
@@ -694,68 +897,144 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
                   </div>
                   {filteredPeers.map((peer) => {
                     const sigPct = rssiToSignalPercentage(peer.rssiDbm);
+                    const isBlocked = isPeerQuarantined(peer.handle);
+                    const isReporting = reportingPeerHandle === peer.handle;
                     return (
                       <div
                         key={peer.handle}
-                        className="p-2 rounded-lg border border-slate-800 bg-slate-950 hover:border-emerald-500/40 flex items-center justify-between transition-all"
+                        className={`p-2 rounded-lg border transition-all ${
+                          isBlocked
+                            ? 'border-red-500/60 bg-red-950/30'
+                            : 'border-slate-800 bg-slate-950 hover:border-emerald-500/40'
+                        }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <div className="relative">
-                            <div className="h-7 w-7 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center font-mono border border-emerald-500/30">
-                              {peer.handle.slice(0, 2).toUpperCase()}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <div className={`h-7 w-7 rounded-full font-bold text-[10px] flex items-center justify-center font-mono border ${
+                                isBlocked
+                                  ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                              }`}>
+                                {peer.handle.slice(0, 2).toUpperCase()}
+                              </div>
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-950 ${
+                                  isBlocked ? 'bg-red-500' : peer.isOnlineMesh ? 'bg-emerald-400' : 'bg-slate-600'
+                                }`}
+                              />
                             </div>
-                            <span
-                              className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-950 ${
-                                peer.isOnlineMesh ? 'bg-emerald-400' : 'bg-slate-600'
-                              }`}
-                            />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-white text-[11px]">{peer.handle}</span>
-                              {peer.isSuperAdmin && (
-                                <span className="text-[7.5px] px-1 rounded bg-amber-500/20 text-amber-300 font-bold">
-                                  ADMIN
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`font-mono font-bold text-[11px] ${isBlocked ? 'text-red-300 line-through' : 'text-white'}`}>
+                                  {peer.handle}
                                 </span>
-                              )}
+                                {peer.isSuperAdmin && (
+                                  <span className="text-[7.5px] px-1 rounded bg-amber-500/20 text-amber-300 font-bold">
+                                    ADMIN
+                                  </span>
+                                )}
+                                {isBlocked && (
+                                  <span className="text-[7.5px] px-1.5 py-0.2 rounded bg-red-500 text-white font-bold animate-pulse">
+                                    AUTO-BLOCKED
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[9.5px] text-slate-400 block truncate max-w-[140px]">
+                                {peer.displayName}
+                              </span>
+                              <div className="flex items-center gap-1.5 text-[8.5px] text-emerald-400 font-mono">
+                                {isBlocked ? (
+                                  <span className="text-red-400">Radio Packets Quarantined & Dropped</span>
+                                ) : peer.isOnlineMesh ? (
+                                  <span>Signal: {sigPct}% 📶</span>
+                                ) : (
+                                  <span className="text-slate-500">Offline (Store & Forward)</span>
+                                )}
+                                <span>• {peer.lastSeenText}</span>
+                              </div>
                             </div>
-                            <span className="text-[9.5px] text-slate-400 block truncate max-w-[140px]">
-                              {peer.displayName}
-                            </span>
-                            {/* Percentage Only - No dBm, No meters, No network type */}
-                            <div className="flex items-center gap-1.5 text-[8.5px] text-emerald-400 font-mono">
-                              {peer.isOnlineMesh ? (
-                                <span>Signal: {sigPct}% 📶</span>
-                              ) : (
-                                <span className="text-slate-500">Offline (Store & Forward)</span>
-                              )}
-                              <span>• {peer.lastSeenText}</span>
-                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            {/* Auto-Block / Report Malicious Peer Button */}
+                            {isBlocked ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUnblockPeer(peer.handle)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-red-300 font-bold text-[9.5px] border border-red-500/40"
+                              >
+                                Unblock
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setReportingPeerHandle(isReporting ? null : peer.handle)}
+                                className="p-1 rounded bg-slate-800 hover:bg-red-950/70 text-slate-300 hover:text-red-300 border border-slate-700 text-[10px]"
+                                title="Auto-Block: Report Jamming, Route Blocking, or Virus"
+                              >
+                                <ShieldAlert className="h-3 w-3" />
+                              </button>
+                            )}
+
+                            {/* Direct Message Button */}
+                            {!isBlocked && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectPeerToChat(peer.handle, peer.displayName);
+                                  onClose();
+                                }}
+                                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors shadow-sm ${
+                                  peer.isOnlineMesh
+                                    ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
+                                    : 'bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40'
+                                }`}
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                <span>{peer.isOnlineMesh ? 'Chat' : 'Message'}</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
-                        {/* Direct Message Button - Works for BOTH online & offline users */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSelectPeerToChat(peer.handle, peer.displayName);
-                            onClose();
-                          }}
-                          className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors shadow-sm ${
-                            peer.isOnlineMesh
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
-                              : 'bg-[#042d21] hover:bg-[#063f2f] text-emerald-200 border border-emerald-500/40'
-                          }`}
-                          title={peer.isOnlineMesh ? 'Chat with peer now' : 'Message offline user via Store-and-Forward'}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                          <span>{peer.isOnlineMesh ? 'Chat' : 'Message'}</span>
-                        </button>
+                        {/* Inline Auto-Block Selection Menu */}
+                        {isReporting && (
+                          <div className="mt-2 pt-2 border-t border-slate-800 bg-slate-900/80 p-2 rounded-lg space-y-1.5 animate-in fade-in">
+                            <span className="text-[9.5px] font-bold text-red-400 block font-mono">
+                              ⚡ AUTO-BLOCK THREAT REASON FOR @{peer.handle}:
+                            </span>
+                            <div className="grid grid-cols-3 gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleExecuteAutoBlock(peer.handle, 'JAMMING')}
+                                className="py-1 px-1 rounded bg-red-900/40 hover:bg-red-800 text-red-200 border border-red-500/40 text-[8.5px] font-bold text-center"
+                              >
+                                🚨 Jamming / Flood
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleExecuteAutoBlock(peer.handle, 'BLOCKING')}
+                                className="py-1 px-1 rounded bg-amber-900/40 hover:bg-amber-800 text-amber-200 border border-amber-500/40 text-[8.5px] font-bold text-center"
+                              >
+                                🛑 Route Blackhole
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleExecuteAutoBlock(peer.handle, 'VIRUS')}
+                                className="py-1 px-1 rounded bg-rose-900/40 hover:bg-rose-800 text-rose-200 border border-rose-500/40 text-[8.5px] font-bold text-center"
+                              >
+                                ☣️ Virus / Malware
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
+
 
               {/* SECTION 2: GROUPS */}
               {(activeSearchTab === 'ALL' || activeSearchTab === 'GROUPS') && filteredGroups.length > 0 && (
@@ -1013,7 +1292,92 @@ export const UserSearchModal: React.FC<UserSearchModalProps> = ({
           </div>
         )}
 
+        {/* ================= AUTO-BLOCK SHIELD & QUARANTINED PEERS DRAWER ================= */}
+        <div className="pt-2 border-t border-slate-800 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowQuarantineDrawer(!showQuarantineDrawer)}
+            className="w-full py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 flex items-center justify-between text-[10.5px] font-mono text-slate-300"
+          >
+            <div className="flex items-center gap-1.5 text-red-400">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>Auto-Block Shield ({quarantinedList.length} Quarantined)</span>
+            </div>
+            <span className="text-[9.5px] text-slate-400">
+              {showQuarantineDrawer ? '▲ Hide' : '▼ Test & View Blocked'}
+            </span>
+          </button>
+
+          {showQuarantineDrawer && (
+            <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-red-500/40 space-y-2 text-xs animate-in fade-in max-h-44 overflow-y-auto">
+              <div className="flex items-center justify-between text-[10px] font-bold text-red-400 font-mono">
+                <span>SIMULATE & TEST AUTO-BLOCK FIREWALL:</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAttack('JAMMING')}
+                  className="py-1 px-1 rounded bg-red-950/70 hover:bg-red-900 text-red-200 border border-red-500/40 text-[9px] font-bold text-center"
+                >
+                  ⚡ Test Jammer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAttack('BLOCKING')}
+                  className="py-1 px-1 rounded bg-amber-950/70 hover:bg-amber-900 text-amber-200 border border-amber-500/40 text-[9px] font-bold text-center"
+                >
+                  🛑 Test Blackhole
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAttack('VIRUS')}
+                  className="py-1 px-1 rounded bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-500/40 text-[9px] font-bold text-center"
+                >
+                  ☣️ Test Virus APK
+                </button>
+              </div>
+
+              <div className="space-y-1 pt-1 border-t border-slate-800">
+                <span className="text-[9.5px] font-bold text-slate-400 font-mono block">
+                  BLOCKED PEERS & DROPPED PACKETS:
+                </span>
+                {quarantinedList.length === 0 ? (
+                  <p className="text-[9px] text-slate-500 italic">No nodes quarantined yet.</p>
+                ) : (
+                  quarantinedList.map((qNode) => (
+                    <div
+                      key={qNode.handle}
+                      className="p-1.5 rounded bg-slate-900 border border-red-500/30 flex items-center justify-between text-[9px]"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1 font-mono font-bold text-red-300">
+                          <span>@{qNode.handle}</span>
+                          <span className="text-[7.5px] px-1 rounded bg-red-900/60 text-red-200">
+                            {qNode.reason}
+                          </span>
+                        </div>
+                        <p className="text-[8px] text-slate-400 truncate max-w-[170px]">{qNode.evidence}</p>
+                        <span className="text-[7.5px] text-slate-500 font-mono">
+                          Dropped: {qNode.packetsDroppedCount} packets • MAC: {qNode.macAddress}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUnblockPeer(qNode.handle)}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-red-300 border border-red-500/30 font-bold text-[8.5px]"
+                      >
+                        Unblock
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
 };
+
